@@ -138,9 +138,10 @@ type Modal =
   | { kind: 'lab'; data: LabOrder }
   | null;
 
-export function ClientPortal() {
-  const [data, setData] = useState<PortalData | null>(null);
-  const [loading, setLoading] = useState(true);
+export function ClientPortal({ initialData }: { initialData?: PortalData | null }) {
+  const [data, setData] = useState<PortalData | null>(initialData ?? null);
+  // Si ya llegó con datos desde el servidor (SSR), no hay nada que cargar.
+  const [loading, setLoading] = useState(!initialData);
   const [modal, setModal] = useState<Modal>(null);
 
   function load() {
@@ -150,7 +151,14 @@ export function ClientPortal() {
       .catch(() => setLoading(false));
   }
 
-  useEffect(() => { load(); }, []);
+  // Con initialData ya no hace falta el fetch inicial — evita el round-trip
+  // extra cliente→servidor que antes dejaba al tutor viendo esqueletos de
+  // carga en cada apertura del portal. `load()` sigue disponible para
+  // refrescar tras acciones (agregar mascota, editar contacto).
+  useEffect(() => {
+    if (!initialData) load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (loading) {
     return (

@@ -31,6 +31,9 @@ export const GET: APIRoute = async ({ request, locals }) => {
   const url = new URL(request.url);
   const patientId = url.searchParams.get('patientId');
   if (!patientId) return new Response(JSON.stringify({ error: 'patientId requerido' }), { status: 400 });
+  // Sin tope, un paciente con años de historial devolvería una respuesta
+  // cada vez más pesada — el resto de listados de la app ya limitan igual.
+  const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit') || '50')));
 
   const records = await db
     .select({
@@ -48,7 +51,8 @@ export const GET: APIRoute = async ({ request, locals }) => {
     .from(medicalRecords)
     .leftJoin(users, eq(medicalRecords.veterinarianId, users.id))
     .where(eq(medicalRecords.patientId, Number(patientId)))
-    .orderBy(desc(medicalRecords.date));
+    .orderBy(desc(medicalRecords.date))
+    .limit(limit);
 
   return new Response(JSON.stringify(records), { headers: { 'Content-Type': 'application/json' } });
 };

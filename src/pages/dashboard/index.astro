@@ -6,6 +6,7 @@ import { NextAppointment } from '../../components/dashboard/NextAppointment';
 import { ExpiringProducts } from '../../components/dashboard/ExpiringProducts';
 import { PendingInvoices } from '../../components/dashboard/PendingInvoices';
 import { ClientPortal } from '../../components/dashboard/ClientPortal';
+import { getPortalData } from '../../lib/portalData';
 import { PawPrint, Calendar, Package, Receipt } from 'lucide-react';
 import { db } from '../../db';
 import { patients, owners } from '../../db/schema/patients';
@@ -26,6 +27,14 @@ const roleGreeting: Record<string, string> = {
 };
 
 const isTutor = user.role === 'tutor';
+
+// Se consulta en el servidor (en vez de que ClientPortal lo pida por fetch
+// tras hidratarse) para no pagar un round-trip cliente→servidor extra en la
+// primera carga del portal — la página llega con los datos ya adentro.
+// JSON.parse(JSON.stringify(...)) fuerza la misma serialización (fechas →
+// string) que ocurre al pasar props a un componente cliente, para que el
+// tipo coincida con lo que ClientPortal espera (igual que fetch().json()).
+const portalData = isTutor ? JSON.parse(JSON.stringify(await getPortalData(user.id))) : null;
 
 // Only load staff stats for non-client roles
 let patientCount = { count: 0 };
@@ -97,7 +106,7 @@ const statusColors: Record<string, string> = {
     </div>
 
     {isTutor ? (
-      <ClientPortal client:load />
+      <ClientPortal client:load initialData={portalData} />
     ) : (
       <>
         <div class="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
@@ -112,7 +121,7 @@ const statusColors: Record<string, string> = {
         </div>
 
         <!-- Próxima cita destacada -->
-        <NextAppointment client:load />
+        <NextAppointment client:visible />
 
         <div class="grid gap-4 grid-cols-1 lg:grid-cols-2 !mt-10">
           <!-- Ruta de Hoy -->

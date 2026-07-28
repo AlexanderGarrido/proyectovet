@@ -30,7 +30,12 @@ export function ProductList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  useEffect(() => { fetchProducts(); }, [search, category, lowStock]);
+  // Debounce: sin esto, cada tecla escrita en el buscador dispara un fetch
+  // al servidor (una invocación serverless + query SQL por letra).
+  useEffect(() => {
+    const t = setTimeout(fetchProducts, 250);
+    return () => clearTimeout(t);
+  }, [search, category, lowStock]);
 
   async function fetchProducts() {
     setLoading(true);

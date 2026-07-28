@@ -15,8 +15,11 @@ const id = Number(Astro.params.id);
 const [owner] = await db.select().from(owners).where(eq(owners.id, id));
 if (!owner) return Astro.redirect('/tutores');
 
-const ownerPatients = await db.select().from(patients).where(eq(patients.ownerId, id)).orderBy(desc(patients.createdAt));
-const ownerInvoices = await db.select().from(invoices).where(eq(invoices.ownerId, id)).orderBy(desc(invoices.date)).limit(20);
+// Independientes entre sí → en paralelo en vez de una tras otra.
+const [ownerPatients, ownerInvoices] = await Promise.all([
+  db.select().from(patients).where(eq(patients.ownerId, id)).orderBy(desc(patients.createdAt)),
+  db.select().from(invoices).where(eq(invoices.ownerId, id)).orderBy(desc(invoices.date)).limit(20),
+]);
 
 const speciesEmoji: Record<string, string> = { perro: '🐕', gato: '🐈', ave: '🐦', reptil: '🦎', roedor: '🐭', conejo: '🐰', otro: '🐾' };
 const invoiceStatusColors: Record<string, string> = {
@@ -69,7 +72,7 @@ const canEdit = user.role === 'admin' || user.role === 'recepcionista';
           ) : (
             <>
               <p class="text-sm text-muted-foreground mb-3">Este tutor aún no tiene cuenta. Genera un link de invitación y compártelo por WhatsApp para que active su portal.</p>
-              <OwnerInviteButton client:load ownerId={id} ownerName={owner.firstName} ownerPhone={owner.phone} />
+              <OwnerInviteButton client:visible ownerId={id} ownerName={owner.firstName} ownerPhone={owner.phone} />
             </>
           )}
         </div>

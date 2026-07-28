@@ -26,8 +26,11 @@ const [invoice] = await db
 
 if (!invoice) return Astro.redirect('/facturacion');
 
-const items = await db.select().from(invoiceItems).where(eq(invoiceItems.invoiceId, id));
-const invoicePayments = await db.select().from(payments).where(eq(payments.invoiceId, id)).orderBy(desc(payments.date));
+// Independientes entre sí → en paralelo en vez de una tras otra.
+const [items, invoicePayments] = await Promise.all([
+  db.select().from(invoiceItems).where(eq(invoiceItems.invoiceId, id)),
+  db.select().from(payments).where(eq(payments.invoiceId, id)).orderBy(desc(payments.date)),
+]);
 
 const statusColors: Record<string, string> = {
   borrador: 'bg-gray-100 text-gray-600', emitida: 'bg-blue-100 text-blue-700',
@@ -131,7 +134,7 @@ const fmt = (n: string) => parseFloat(n).toLocaleString('es-CL', { maximumFracti
             class="inline-block text-sm px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
             Registrar Pago
           </a>
-          <PaymentLinkButton client:load invoiceId={id} ownerName={`${invoice.ownerFirstName} ${invoice.ownerLastName}`} ownerPhone={invoice.ownerPhone} />
+          <PaymentLinkButton client:visible invoiceId={id} ownerName={`${invoice.ownerFirstName} ${invoice.ownerLastName}`} ownerPhone={invoice.ownerPhone} />
         </div>
       )}
     </div>

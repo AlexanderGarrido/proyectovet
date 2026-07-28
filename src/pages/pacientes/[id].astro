@@ -31,8 +31,11 @@ const [patient] = await db
 
 if (!patient) return Astro.redirect('/pacientes');
 
-const records = await db.select().from(medicalRecords).where(eq(medicalRecords.patientId, id)).orderBy(desc(medicalRecords.date)).limit(30);
-const appts = await db.select().from(appointments).where(eq(appointments.patientId, id)).orderBy(desc(appointments.scheduledAt)).limit(30);
+// Independientes entre sí → en paralelo en vez de una tras otra.
+const [records, appts] = await Promise.all([
+  db.select().from(medicalRecords).where(eq(medicalRecords.patientId, id)).orderBy(desc(medicalRecords.date)).limit(30),
+  db.select().from(appointments).where(eq(appointments.patientId, id)).orderBy(desc(appointments.scheduledAt)).limit(30),
+]);
 
 const canEdit = user.role === 'admin' || user.role === 'veterinario';
 const canManageOwners = user.role === 'admin' || user.role === 'recepcionista';
@@ -85,7 +88,7 @@ const speciesEmoji: Record<string, string> = { perro: '🐕', gato: '🐈', ave:
         {patient.ownerEmail && <p class="text-sm text-muted-foreground">{patient.ownerEmail}</p>}
       </div>
 
-      <CoOwnersSection client:load patientId={id} canEdit={canManageOwners} />
+      <CoOwnersSection client:visible patientId={id} canEdit={canManageOwners} />
 
       {patient.notes && (
         <div class="rounded-xl border bg-card p-6">

@@ -11,5 +11,7 @@ if (user.role !== 'admin' && user.role !== 'recepcionista') return Astro.redirec
   <div class="mb-4">
     <a href="/facturacion" class="text-sm text-muted-foreground hover:text-foreground transition-colors">← Volver a Facturación</a>
   </div>
-  <ReportsCharts client:load />
+  {/* client:visible: Recharts es el bundle más pesado de la app (~370KB);
+      diferir su hidratación evita bloquear el hilo principal en el primer render. */}
+  <ReportsCharts client:visible />
 </DashboardLayout>

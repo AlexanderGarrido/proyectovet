@@ -4,8 +4,7 @@ import { products, stockMovements } from '../../../db/schema/inventory';
 import { eq, and, gte, sql } from 'drizzle-orm';
 import { stockMovementSchema, zodError } from '../../../lib/schemas';
 import { jsonError, jsonOk } from '../../../lib/http';
-
-const STAFF_ROLES = ['admin', 'veterinario', 'recepcionista'];
+import { requirePermission } from '../../../lib/guard';
 
 class StockOpError extends Error {
   constructor(message: string, public status: number) {
@@ -15,10 +14,8 @@ class StockOpError extends Error {
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const user = locals.user;
-  if (!user) return jsonError(401, 'No autorizado');
-  if (!STAFF_ROLES.includes(user.role)) {
-    return jsonError(403, 'Sin permiso');
-  }
+  const guardErr = requirePermission(user, 'inventory', 'write');
+  if (guardErr) return guardErr;
 
   const body = await request.json();
   const parsed = stockMovementSchema.safeParse(body);
@@ -55,7 +52,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       }
 
       await tx.insert(stockMovements).values({
-        productId, type, quantity: String(quantity), reason: reason || null, userId: user.id,
+        productId, type, quantity: String(quantity), reason: reason || null, userId: user!.id,
       });
 
       return product;

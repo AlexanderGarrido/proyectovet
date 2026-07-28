@@ -11,6 +11,7 @@ import {
   LogOut,
   Users,
   X,
+  FileSignature,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
@@ -27,6 +28,7 @@ const iconMap: Record<string, LucideIcon> = {
   BarChart3,
   Settings,
   Users,
+  FileSignature,
 };
 
 interface NavItem {

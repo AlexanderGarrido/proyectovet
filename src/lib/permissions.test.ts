@@ -26,12 +26,12 @@ describe('hasPermission', () => {
       expect(hasPermission('veterinario', 'prescriptions', 'write')).toBe(true);
     });
 
-    it('NO puede escribir facturas', () => {
-      expect(hasPermission('veterinario', 'invoices', 'write')).toBe(false);
+    it('puede escribir facturas (emitir/cobrar en el domicilio)', () => {
+      expect(hasPermission('veterinario', 'invoices', 'write')).toBe(true);
     });
 
-    it('NO puede gestionar inventario (write)', () => {
-      expect(hasPermission('veterinario', 'inventory', 'write')).toBe(false);
+    it('puede gestionar inventario (write) — ajustar su botiquín', () => {
+      expect(hasPermission('veterinario', 'inventory', 'write')).toBe(true);
     });
   });
 

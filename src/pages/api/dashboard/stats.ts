@@ -6,6 +6,11 @@ import { products } from '../../../db/schema/inventory';
 import { invoices } from '../../../db/schema/billing';
 import { eq, gte, and, asc, desc, sql, isNotNull } from 'drizzle-orm';
 
+// No migrado a guard.ts a propósito: estas son estadísticas GLOBALES de la
+// clínica (próxima cita de cualquiera, stock por vencer, facturas
+// pendientes de todos). El permiso genérico 'dashboard:read' también lo
+// tiene el tutor (para SU propio portal) — usarlo aquí dejaría pasar a
+// cualquier tutor a ver datos operativos de toda la clínica.
 const STAFF_ROLES = ['admin', 'veterinario', 'recepcionista'];
 
 export const GET: APIRoute = async ({ locals }) => {

@@ -4,15 +4,15 @@ import { invoices, invoiceItems, payments } from '../../../db/schema/billing';
 import { owners } from '../../../db/schema/patients';
 import { eq, desc } from 'drizzle-orm';
 import { invoiceSchema, zodError } from '../../../lib/schemas';
-
-const STAFF_ROLES = ['admin', 'veterinario', 'recepcionista'];
+import { requirePermission, requireUnscopedPermission } from '../../../lib/guard';
 
 export const GET: APIRoute = async ({ request, locals }) => {
   const user = locals.user;
-  if (!user) return new Response(JSON.stringify({ error: 'No autorizado' }), { status: 401 });
-  if (!STAFF_ROLES.includes(user.role)) {
-    return new Response(JSON.stringify({ error: 'Acceso denegado' }), { status: 403 });
-  }
+  // Este listado no filtra por pertenencia — no puede dejar pasar a un
+  // tutor (que solo tiene "invoices:read:own"), o vería las facturas de
+  // todos los tutores de la clínica, no solo las suyas.
+  const guardErr = requireUnscopedPermission(user, 'invoices', 'read');
+  if (guardErr) return guardErr;
 
   const url = new URL(request.url);
   const page = Math.max(1, Number(url.searchParams.get('page') || '1'));
@@ -44,10 +44,8 @@ export const GET: APIRoute = async ({ request, locals }) => {
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const user = locals.user;
-  if (!user) return new Response(JSON.stringify({ error: 'No autorizado' }), { status: 401 });
-  if (!STAFF_ROLES.includes(user.role)) {
-    return new Response(JSON.stringify({ error: 'Sin permiso' }), { status: 403 });
-  }
+  const guardErr = requirePermission(user, 'invoices', 'write');
+  if (guardErr) return guardErr;
 
   const body = await request.json();
   const parsed = invoiceSchema.safeParse(body);
@@ -78,7 +76,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       discount: String(disc.toFixed(2)),
       total: String(total.toFixed(2)),
       notes,
-      createdBy: user.id,
+      createdBy: user!.id,
     }).returning();
 
     const invoiceId = created.id;

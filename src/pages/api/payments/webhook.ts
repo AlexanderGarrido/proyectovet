@@ -6,6 +6,7 @@ import { eq } from 'drizzle-orm';
 import { getMercadoPagoClient } from '../../../lib/payments/mercadopago';
 import { jsonError, jsonOk } from '../../../lib/http';
 import { logAudit } from '../../../lib/audit';
+import { toCents, fromCents } from '../../../lib/money';
 
 /**
  * Webhook de Mercado Pago: cuando un tutor paga desde el link de Checkout
@@ -83,10 +84,11 @@ export const POST: APIRoute = async ({ request, url }) => {
   }
 
   const amount = mpPayment.transaction_amount ?? 0;
+  const amountCents = toCents(amount);
 
   await db.insert(payments).values({
     invoiceId,
-    amount: String(amount.toFixed(2)),
+    amount: fromCents(amountCents),
     method: 'otro',
     reference,
     date: new Date(),
@@ -96,9 +98,9 @@ export const POST: APIRoute = async ({ request, url }) => {
   });
 
   const allPayments = await db.select().from(payments).where(eq(payments.invoiceId, invoiceId));
-  const paid = allPayments.reduce((sum, p) => sum + parseFloat(String(p.amount)), 0);
-  const total = parseFloat(String(invoice.total));
-  const newStatus = paid >= total ? 'pagada' : paid > 0 ? 'parcial' : invoice.status;
+  const paidCents = allPayments.reduce((sum, p) => sum + toCents(p.amount), 0);
+  const totalCents = toCents(invoice.total);
+  const newStatus = paidCents >= totalCents ? 'pagada' : paidCents > 0 ? 'parcial' : invoice.status;
 
   await db.update(invoices).set({ status: newStatus }).where(eq(invoices.id, invoiceId));
 

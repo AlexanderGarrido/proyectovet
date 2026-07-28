@@ -4,6 +4,10 @@ import { patients } from '../../../../db/schema/patients';
 import { eq } from 'drizzle-orm';
 import { jsonError } from '../../../../lib/http';
 
+// No migrado a guard.ts a propósito: 'patients:read' también lo cumple un
+// tutor (vía la variante :own), pero este endpoint no verifica pertenencia
+// — es la ruta optimizada para las tarjetas del listado de STAFF. Un tutor
+// ya recibe la foto de su propia mascota embebida en /api/client/portal.
 const STAFF_ROLES = ['admin', 'veterinario', 'recepcionista'];
 
 /**

@@ -8,6 +8,9 @@ const permissions: Record<UserRole, Permission[]> = {
     'patients:read',
     'patients:write',
     'owners:read',
+    // El vet en terreno necesita poder crear/invitar tutores nuevos (visita
+    // a un cliente que aún no tiene ficha) sin depender de recepción.
+    'owners:write',
     'medical-records:read',
     'medical-records:write',
     'prescriptions:read',
@@ -18,12 +21,18 @@ const permissions: Record<UserRole, Permission[]> = {
     'appointments:write',
     'vaccines:read',
     'vaccines:write',
+    'consents:read',
+    'consents:write',
     'invoices:read',
+    // Puede emitir la factura en el momento de la visita, no solo cobrarla.
+    'invoices:write',
     // El vet en el domicilio necesita poder cobrar en el momento (efectivo o
     // link de pago), no solo recepción/admin desde la clínica.
     'payments:read',
     'payments:write',
     'inventory:read',
+    // Ajustar el stock de su propio botiquín (vehículo) tras usar insumos.
+    'inventory:write',
     'dashboard:read',
   ],
   recepcionista: [
@@ -33,11 +42,13 @@ const permissions: Record<UserRole, Permission[]> = {
     'owners:write',
     'appointments:read',
     'appointments:write',
+    'consents:read',
     'invoices:read',
     'invoices:write',
     'payments:read',
     'payments:write',
     'inventory:read',
+    'inventory:write',
     'dashboard:read',
   ],
   tutor: [
@@ -91,6 +102,7 @@ export const STAFF_ROUTES = [
   '/facturacion',
   '/metricas',
   '/configuracion',
+  '/consentimientos',
 ];
 
 export function getNavItems(role: UserRole) {
@@ -109,6 +121,7 @@ export function getNavItems(role: UserRole) {
     { label: 'Tutores', href: '/tutores', icon: 'Users', permission: 'owners:read' },
     { label: 'Citas', href: '/citas', icon: 'Calendar', permission: 'appointments:read' },
     { label: 'Recetas', href: '/recetas', icon: 'FileText', permission: 'prescriptions:read' },
+    { label: 'Consentimientos', href: '/consentimientos', icon: 'FileSignature', permission: 'consents:read' },
     { label: 'Laboratorio', href: '/ordenes', icon: 'FlaskConical', permission: 'lab-orders:read' },
     { label: 'Inventario', href: '/inventario', icon: 'Package', permission: 'inventory:read' },
     { label: 'Facturacion', href: '/facturacion', icon: 'Receipt', permission: 'invoices:read' },

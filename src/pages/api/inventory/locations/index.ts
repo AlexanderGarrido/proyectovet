@@ -4,8 +4,7 @@ import { stockLocations } from '../../../../db/schema/inventory';
 import { eq } from 'drizzle-orm';
 import { stockLocationSchema, zodError, parseJsonBody } from '../../../../lib/schemas';
 import { jsonError, jsonOk } from '../../../../lib/http';
-
-const STAFF_ROLES = ['admin', 'veterinario', 'recepcionista'];
+import { requirePermission } from '../../../../lib/guard';
 
 /**
  * Botiquín itinerante: ubicaciones de inventario (bodega central vs.
@@ -15,8 +14,8 @@ const STAFF_ROLES = ['admin', 'veterinario', 'recepcionista'];
  */
 export const GET: APIRoute = async ({ locals }) => {
   const user = locals.user;
-  if (!user) return jsonError(401, 'No autorizado');
-  if (!STAFF_ROLES.includes(user.role)) return jsonError(403, 'Sin permiso');
+  const guardErr = requirePermission(user, 'inventory', 'read');
+  if (guardErr) return guardErr;
 
   const result = await db.select().from(stockLocations).where(eq(stockLocations.isActive, true));
   return jsonOk(result);

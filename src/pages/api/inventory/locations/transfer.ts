@@ -4,8 +4,7 @@ import { products, stockByLocation, stockMovements } from '../../../../db/schema
 import { eq, and, gte, sql } from 'drizzle-orm';
 import { stockTransferSchema, zodError, parseJsonBody } from '../../../../lib/schemas';
 import { jsonError, jsonOk } from '../../../../lib/http';
-
-const STAFF_ROLES = ['admin', 'veterinario', 'recepcionista'];
+import { requirePermission } from '../../../../lib/guard';
 
 class StockOpError extends Error {
   constructor(message: string, public status: number) {
@@ -26,8 +25,8 @@ class StockOpError extends Error {
  */
 export const POST: APIRoute = async ({ request, locals }) => {
   const user = locals.user;
-  if (!user) return jsonError(401, 'No autorizado');
-  if (!STAFF_ROLES.includes(user.role)) return jsonError(403, 'Sin permiso');
+  const guardErr = requirePermission(user, 'inventory', 'write');
+  if (guardErr) return guardErr;
 
   const parsed = await parseJsonBody(request);
   if ('error' in parsed) return parsed.error;
@@ -80,7 +79,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
         quantity: String(quantity),
         reason: fromLocationId ? 'Transferencia entre ubicaciones' : 'Asignación a botiquín',
         locationId: toLocationId,
-        userId: user.id,
+        userId: user!.id,
       });
     });
   } catch (err) {

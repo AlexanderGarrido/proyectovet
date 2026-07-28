@@ -3,10 +3,10 @@ import { db } from '../../../db';
 import { appointments } from '../../../db/schema/appointments';
 import { patients, owners } from '../../../db/schema/patients';
 import { users } from '../../../db/schema/users';
-import { eq, gte, lte, and, desc } from 'drizzle-orm';
+import { eq, gte, lte, and, desc, sql } from 'drizzle-orm';
 import { appointmentSchema, zodError } from '../../../lib/schemas';
 import { requirePermission } from '../../../lib/guard';
-import { jsonError, jsonOk } from '../../../lib/http';
+import { jsonError, jsonOk, jsonOkPaginated } from '../../../lib/http';
 
 export const GET: APIRoute = async ({ request, locals }) => {
   const user = locals.user;
@@ -42,35 +42,40 @@ export const GET: APIRoute = async ({ request, locals }) => {
     conditions.push(eq(appointments.ownerId, owner.id));
   }
 
-  const result = await db
-    .select({
-      id: appointments.id,
-      scheduledAt: appointments.scheduledAt,
-      endAt: appointments.endAt,
-      type: appointments.type,
-      status: appointments.status,
-      reason: appointments.reason,
-      notes: appointments.notes,
-      patientId: appointments.patientId,
-      patientName: patients.name,
-      patientSpecies: patients.species,
-      ownerId: appointments.ownerId,
-      ownerFirstName: owners.firstName,
-      ownerLastName: owners.lastName,
-      ownerPhone: owners.phone,
-      veterinarianId: appointments.veterinarianId,
-      veterinarianName: users.name,
-    })
-    .from(appointments)
-    .leftJoin(patients, eq(appointments.patientId, patients.id))
-    .leftJoin(owners, eq(appointments.ownerId, owners.id))
-    .leftJoin(users, eq(appointments.veterinarianId, users.id))
-    .where(conditions.length > 0 ? and(...conditions) : undefined)
-    .orderBy(desc(appointments.scheduledAt))
-    .limit(limit)
-    .offset(offset);
+  const whereCondition = conditions.length > 0 ? and(...conditions) : undefined;
 
-  return jsonOk(result);
+  const [result, [{ count }]] = await Promise.all([
+    db
+      .select({
+        id: appointments.id,
+        scheduledAt: appointments.scheduledAt,
+        endAt: appointments.endAt,
+        type: appointments.type,
+        status: appointments.status,
+        reason: appointments.reason,
+        notes: appointments.notes,
+        patientId: appointments.patientId,
+        patientName: patients.name,
+        patientSpecies: patients.species,
+        ownerId: appointments.ownerId,
+        ownerFirstName: owners.firstName,
+        ownerLastName: owners.lastName,
+        ownerPhone: owners.phone,
+        veterinarianId: appointments.veterinarianId,
+        veterinarianName: users.name,
+      })
+      .from(appointments)
+      .leftJoin(patients, eq(appointments.patientId, patients.id))
+      .leftJoin(owners, eq(appointments.ownerId, owners.id))
+      .leftJoin(users, eq(appointments.veterinarianId, users.id))
+      .where(whereCondition)
+      .orderBy(desc(appointments.scheduledAt))
+      .limit(limit)
+      .offset(offset),
+    db.select({ count: sql<number>`count(*)::int` }).from(appointments).where(whereCondition),
+  ]);
+
+  return jsonOkPaginated(result, count);
 };
 
 export const POST: APIRoute = async ({ request, locals }) => {

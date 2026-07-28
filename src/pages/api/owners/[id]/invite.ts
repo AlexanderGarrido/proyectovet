@@ -4,8 +4,8 @@ import { owners } from '../../../../db/schema/patients';
 import { ownerInvites } from '../../../../db/schema/invites';
 import { eq, and, isNull } from 'drizzle-orm';
 import { randomBytes } from 'crypto';
+import { requirePermission } from '../../../../lib/guard';
 
-const STAFF_ROLES = ['admin', 'veterinario', 'recepcionista'];
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 días
 
 /**
@@ -16,10 +16,8 @@ const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 días
  */
 export const POST: APIRoute = async ({ params, locals }) => {
   const user = locals.user;
-  if (!user) return new Response(JSON.stringify({ error: 'No autorizado' }), { status: 401 });
-  if (!STAFF_ROLES.includes(user.role)) {
-    return new Response(JSON.stringify({ error: 'Sin permiso' }), { status: 403 });
-  }
+  const guardErr = requirePermission(user, 'owners', 'write');
+  if (guardErr) return guardErr;
 
   const ownerId = Number(params.id);
   if (!ownerId || isNaN(ownerId) || ownerId <= 0) {
@@ -40,7 +38,7 @@ export const POST: APIRoute = async ({ params, locals }) => {
   await db.insert(ownerInvites).values({
     token,
     ownerId,
-    createdBy: user.id,
+    createdBy: user!.id,
     expiresAt: new Date(Date.now() + INVITE_TTL_MS),
   });
 

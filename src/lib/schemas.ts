@@ -302,6 +302,12 @@ export const medicalRecordCreateSchema = z.object({
     // ubicación (ej. el vehículo del vet) además del total del producto.
     locationId: z.number().int().positive().optional().nullable(),
   })).optional().nullable(),
+  // Fotos clínicas tomadas en terreno (lesiones, dermatología, conducta),
+  // ya comprimidas del lado del cliente. Mismo límite de tamaño que la foto
+  // de perfil de la mascota; hasta 6 por consulta.
+  photos: z.array(
+    z.string().max(700_000, 'Cada imagen no puede superar 500KB').refine(v => v.startsWith('data:image/'), 'Formato de imagen inválido')
+  ).max(6, 'Máximo 6 fotos por consulta').optional().nullable(),
 });
 
 // ── Vaccine Create (POST) ────────────────────────────────────────────────────
@@ -327,6 +333,17 @@ export const labOrderCreateSchema = z.object({
   type: z.string().min(1, 'El tipo es requerido').max(100),
   description: z.string().max(2000).optional().nullable(),
 });
+
+// ── Consentimiento informado (firma digital) ─────────────────────────────────
+export const consentFormSchema = z.object({
+  patientId: z.coerce.number().int().positive('Paciente requerido'),
+  type: z.enum(['cirugia', 'eutanasia', 'anestesia', 'procedimiento', 'otro']),
+  description: z.string().min(1, 'Describe el procedimiento').max(2000),
+  signedByName: z.string().min(1, 'El nombre de quien firma es requerido').max(200),
+  signedByRelation: z.string().max(100).optional().nullable(),
+  signature: z.string().min(1, 'La firma es requerida').max(300_000, 'La firma es demasiado pesada').refine(v => v.startsWith('data:image/'), 'Firma inválida'),
+});
+export type ConsentFormInput = z.infer<typeof consentFormSchema>;
 
 // ── Payment Create (POST) ────────────────────────────────────────────────────
 export const paymentCreateSchema = z.object({

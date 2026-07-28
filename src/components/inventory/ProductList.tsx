@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Plus, Package, Eye, AlertTriangle, AlertCircle } from 'lucide-react';
+import { Search, Plus, Package, Eye, AlertTriangle, AlertCircle, Truck } from 'lucide-react';
 import { Skeleton } from '../ui/skeleton';
 import { EmptyState } from '../ui/empty-state';
 import { Button } from '../ui/button';
@@ -72,6 +72,10 @@ export function ProductList() {
           <input type="checkbox" checked={lowStock} onChange={(e) => setLowStock(e.target.checked)} className="rounded" />
           Stock bajo
         </label>
+        <a href="/inventario/botiquin"
+          className="flex items-center gap-2 border px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors">
+          <Truck className="h-4 w-4" /> Botiquín
+        </a>
         <a href="/inventario/nuevo"
           className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors">
           <Plus className="h-4 w-4" /> Nuevo Producto

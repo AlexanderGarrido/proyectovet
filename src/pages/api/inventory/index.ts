@@ -1,7 +1,8 @@
 import type { APIRoute } from 'astro';
 import { db } from '../../../db';
 import { products, stockMovements } from '../../../db/schema/inventory';
-import { eq, ilike, or, lte, desc, and } from 'drizzle-orm';
+import { eq, ilike, or, lte, desc, and, sql } from 'drizzle-orm';
+import { jsonOkPaginated } from '../../../lib/http';
 
 export const GET: APIRoute = async ({ request, locals }) => {
   const user = locals.user;
@@ -15,21 +16,19 @@ export const GET: APIRoute = async ({ request, locals }) => {
   const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit') || '100')));
   const offset = (page - 1) * limit;
 
-  let query = db.select().from(products).$dynamic();
-
   const conditions = [eq(products.isActive, true)];
   if (search) conditions.push(or(ilike(products.name, `%${search}%`), ilike(products.sku, `%${search}%`)) as any);
   if (category) conditions.push(eq(products.category, category as any));
+  if (lowStock) conditions.push(lte(products.stock, products.minStock) as any);
 
-  query = query.where(and(...conditions));
+  const whereCondition = and(...conditions);
 
-  if (lowStock) {
-    query = (db.select().from(products) as any)
-      .where(and(eq(products.isActive, true), lte(products.stock, products.minStock)));
-  }
+  const [result, [{ count }]] = await Promise.all([
+    db.select().from(products).where(whereCondition).orderBy(desc(products.updatedAt)).limit(limit).offset(offset),
+    db.select({ count: sql<number>`count(*)::int` }).from(products).where(whereCondition),
+  ]);
 
-  const result = await query.orderBy(desc(products.updatedAt)).limit(limit).offset(offset);
-  return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
+  return jsonOkPaginated(result, count);
 };
 
 export const POST: APIRoute = async ({ request, locals }) => {

@@ -5,6 +5,7 @@ import { eq } from 'drizzle-orm';
 import { paymentCreateSchema, zodError, parseJsonBody } from '../../../lib/schemas';
 import { requirePermission } from '../../../lib/guard';
 import { jsonError, jsonOk } from '../../../lib/http';
+import { toCents, fromCents } from '../../../lib/money';
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const user = locals.user;
@@ -31,23 +32,24 @@ export const POST: APIRoute = async ({ request, locals }) => {
   }
 
   const allPayments = await db.select().from(payments).where(eq(payments.invoiceId, invoiceId));
-  const alreadyPaid = allPayments.reduce((sum, p) => sum + parseFloat(String(p.amount)), 0);
-  const total = parseFloat(String(invoice.total));
-  if (alreadyPaid + amount > total + 0.01) {
-    return jsonError(400, `El monto excede el saldo pendiente (quedan ${(total - alreadyPaid).toFixed(2)})`);
+  const alreadyPaidCents = allPayments.reduce((sum, p) => sum + toCents(p.amount), 0);
+  const totalCents = toCents(invoice.total);
+  const amountCents = toCents(amount);
+  if (alreadyPaidCents + amountCents > totalCents) {
+    return jsonError(400, `El monto excede el saldo pendiente (quedan ${fromCents(totalCents - alreadyPaidCents)})`);
   }
 
   await db.insert(payments).values({
     invoiceId,
-    amount: String(amount.toFixed(2)),
+    amount: fromCents(amountCents),
     method,
     reference: reference || null,
     date: new Date(),
     receivedBy: user!.id,
   });
 
-  const paid = alreadyPaid + amount;
-  const newStatus = paid >= total ? 'pagada' : paid > 0 ? 'parcial' : invoice.status;
+  const paidCents = alreadyPaidCents + amountCents;
+  const newStatus = paidCents >= totalCents ? 'pagada' : paidCents > 0 ? 'parcial' : invoice.status;
 
   await db.update(invoices).set({ status: newStatus }).where(eq(invoices.id, invoiceId));
 

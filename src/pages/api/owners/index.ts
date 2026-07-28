@@ -3,15 +3,13 @@ import { db } from '../../../db';
 import { owners, patients } from '../../../db/schema/patients';
 import { ilike, or, desc, sql, inArray } from 'drizzle-orm';
 import { ownerSchema, zodError } from '../../../lib/schemas';
-
-const STAFF_ROLES = ['admin', 'veterinario', 'recepcionista'];
+import { jsonOkPaginated, jsonOk } from '../../../lib/http';
+import { requirePermission } from '../../../lib/guard';
 
 export const GET: APIRoute = async ({ request, locals }) => {
   const user = locals.user;
-  if (!user) return new Response(JSON.stringify({ error: 'No autorizado' }), { status: 401 });
-  if (!STAFF_ROLES.includes(user.role)) {
-    return new Response(JSON.stringify({ error: 'Acceso denegado' }), { status: 403 });
-  }
+  const guardErr = requirePermission(user, 'owners', 'read');
+  if (guardErr) return guardErr;
 
   const url = new URL(request.url);
   const search = url.searchParams.get('search') || '';
@@ -19,41 +17,45 @@ export const GET: APIRoute = async ({ request, locals }) => {
   const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit') || '100')));
   const offset = (page - 1) * limit;
 
-  let query = db.select().from(owners).$dynamic();
-  if (search) {
-    query = query.where(
-      or(
+  const whereCondition = search
+    ? or(
         ilike(owners.firstName, `%${search}%`),
         ilike(owners.lastName, `%${search}%`),
         ilike(owners.email, `%${search}%`),
         ilike(owners.phone, `%${search}%`)
       )
-    );
-  }
+    : undefined;
 
-  const result = await query.orderBy(desc(owners.createdAt)).limit(limit).offset(offset);
+  let query = db.select().from(owners).$dynamic();
+  if (whereCondition) query = query.where(whereCondition);
+
+  const [result, [{ count }]] = await Promise.all([
+    query.orderBy(desc(owners.createdAt)).limit(limit).offset(offset),
+    db.select({ count: sql<number>`count(*)::int` }).from(owners).where(whereCondition),
+  ]);
 
   // Conteo de mascotas activas por tutor, en una sola consulta agregada.
   const ids = result.map((o) => o.id);
-  const counts = ids.length
+  const petCounts = ids.length
     ? await db
         .select({ ownerId: patients.ownerId, count: sql<number>`count(*)::int` })
         .from(patients)
         .where(inArray(patients.ownerId, ids))
         .groupBy(patients.ownerId)
     : [];
-  const countByOwner = new Map(counts.map((c) => [c.ownerId, c.count]));
+  const countByOwner = new Map(petCounts.map((c) => [c.ownerId, c.count]));
 
   const withCounts = result.map((o) => ({ ...o, petCount: countByOwner.get(o.id) ?? 0 }));
 
-  return new Response(JSON.stringify(withCounts), {
-    headers: { 'Content-Type': 'application/json' },
-  });
+  return jsonOkPaginated(withCounts, count);
 };
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const user = locals.user;
-  if (!user) return new Response(JSON.stringify({ error: 'No autorizado' }), { status: 401 });
+  // SEGURIDAD: antes cualquier usuario autenticado (incluido un tutor) podía
+  // crear fichas de tutor arbitrarias — sin ningún chequeo de rol.
+  const guardErr = requirePermission(user, 'owners', 'write');
+  if (guardErr) return guardErr;
 
   const body = await request.json();
   const parsed = ownerSchema.safeParse(body);
@@ -63,8 +65,5 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const [newOwner] = await db.insert(owners).values({
     firstName, lastName, email: email || null, phone: phone || null, address: address || null, documentId: documentId || null,
   }).returning();
-  return new Response(JSON.stringify(newOwner), {
-    status: 201,
-    headers: { 'Content-Type': 'application/json' },
-  });
+  return jsonOk(newOwner, 201);
 };

@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
 import { db } from '../../../db';
-import { medicalRecords, vaccines } from '../../../db/schema/medical';
+import { medicalRecords, vaccines, medicalRecordAttachments } from '../../../db/schema/medical';
 import { users } from '../../../db/schema/users';
 import { patients } from '../../../db/schema/patients';
 import { products, stockMovements, stockByLocation } from '../../../db/schema/inventory';
@@ -13,6 +13,12 @@ class StockOpError extends Error {
   }
 }
 
+// No migrado a guard.ts: permissions.ts NO le da 'medical-records' a
+// recepcionista (los diagnósticos/tratamientos son más sensibles que el
+// resto de lo que administra recepción), pero este endpoint sí la deja
+// pasar históricamente. Es una divergencia real entre código y política —
+// se deja explícita en vez de cambiar silenciosamente el acceso de
+// recepcionista a historiales clínicos sin que sea una decisión consciente.
 const STAFF_ROLES = ['admin', 'veterinario', 'recepcionista'];
 
 export const GET: APIRoute = async ({ request, locals }) => {
@@ -58,7 +64,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if ('error' in parsed) return parsed.error;
   const result_ = medicalRecordCreateSchema.safeParse(parsed.data);
   if (!result_.success) return zodError(result_.error);
-  const { patientId, appointmentId, date, reason, subjective, diagnosis, treatment, observations, vitalSigns, suppliesUsed } = result_.data;
+  const { patientId, appointmentId, date, reason, subjective, diagnosis, treatment, observations, vitalSigns, suppliesUsed, photos } = result_.data;
 
   // Chequeo temprano (mejora UX: falla rápido con mensaje claro), pero NO es
   // la única defensa — la resta real es atómica dentro de la transacción de
@@ -94,6 +100,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
         reason, subjective, diagnosis, treatment, observations,
         vitalSigns: vitalSigns ?? null,
       }).returning();
+
+      if (photos && photos.length > 0) {
+        await tx.insert(medicalRecordAttachments).values(
+          photos.map((photo) => ({ medicalRecordId: record.id, photo }))
+        );
+      }
 
       if (suppliesUsed && suppliesUsed.length > 0) {
         for (const supply of suppliesUsed) {

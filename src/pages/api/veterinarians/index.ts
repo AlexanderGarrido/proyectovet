@@ -3,6 +3,9 @@ import { db } from '../../../db';
 import { users } from '../../../db/schema/users';
 import { and, eq } from 'drizzle-orm';
 
+// No migrado a guard.ts: no hay un recurso propio para "lista de
+// veterinarios" en permissions.ts, y mapearlo a 'appointments:read' dejaría
+// pasar a un tutor (tiene appointments:read:own) sin necesitarlo.
 const STAFF_ROLES = ['admin', 'veterinario', 'recepcionista'];
 
 /**

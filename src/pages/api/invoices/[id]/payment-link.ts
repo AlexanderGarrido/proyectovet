@@ -4,15 +4,14 @@ import { invoices } from '../../../../db/schema/billing';
 import { owners } from '../../../../db/schema/patients';
 import { eq } from 'drizzle-orm';
 import { createInvoicePaymentLink } from '../../../../lib/payments/mercadopago';
-
-// El veterinario en el domicilio también debe poder generar el link de pago
-// en el momento — antes solo admin/recepcionista podían, desde la clínica.
-const STAFF_ROLES = ['admin', 'recepcionista', 'veterinario'];
+import { requirePermission } from '../../../../lib/guard';
 
 export const POST: APIRoute = async ({ params, locals }) => {
   const user = locals.user;
-  if (!user) return new Response(JSON.stringify({ error: 'No autorizado' }), { status: 401 });
-  if (!STAFF_ROLES.includes(user.role)) return new Response(JSON.stringify({ error: 'Sin permiso' }), { status: 403 });
+  // El veterinario en el domicilio también debe poder generar el link de
+  // pago en el momento — antes solo admin/recepcionista podían.
+  const guardErr = requirePermission(user, 'payments', 'write');
+  if (guardErr) return guardErr;
 
   const id = Number(params.id);
   if (!id || isNaN(id)) return new Response(JSON.stringify({ error: 'ID inválido' }), { status: 400 });

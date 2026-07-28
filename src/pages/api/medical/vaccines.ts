@@ -6,6 +6,8 @@ import { products, stockMovements, stockByLocation } from '../../../db/schema/in
 import { eq, and, gte, sql, desc } from 'drizzle-orm';
 import { vaccineCreateSchema, zodError, parseJsonBody } from '../../../lib/schemas';
 import { jsonError, jsonOk } from '../../../lib/http';
+import { canTutorAccessPatient } from '../../../lib/ownership';
+import { requirePermission } from '../../../lib/guard';
 
 class StockOpError extends Error {
   constructor(message: string, public status: number) {
@@ -15,11 +17,20 @@ class StockOpError extends Error {
 
 export const GET: APIRoute = async ({ request, locals }) => {
   const user = locals.user;
-  if (!user) return new Response(JSON.stringify({ error: 'No autorizado' }), { status: 401 });
+  // SEGURIDAD (IDOR): antes solo exigía sesión — cualquier tutor autenticado
+  // podía leer las vacunas de CUALQUIER mascota cambiando el patientId en la
+  // URL, sin verificar que fuera la suya.
+  const guardErr = requirePermission(user, 'vaccines', 'read');
+  if (guardErr) return guardErr;
 
   const url = new URL(request.url);
   const patientId = url.searchParams.get('patientId');
-  if (!patientId) return new Response(JSON.stringify({ error: 'patientId requerido' }), { status: 400 });
+  if (!patientId) return jsonError(400, 'patientId requerido');
+
+  if (user!.role === 'tutor') {
+    const allowed = await canTutorAccessPatient(user!.id, Number(patientId));
+    if (!allowed) return jsonError(403, 'Sin permiso');
+  }
 
   const result = await db
     .select({
@@ -37,15 +48,13 @@ export const GET: APIRoute = async ({ request, locals }) => {
     .where(eq(vaccines.patientId, Number(patientId)))
     .orderBy(desc(vaccines.applicationDate));
 
-  return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
+  return jsonOk(result);
 };
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const user = locals.user;
-  if (!user) return new Response(JSON.stringify({ error: 'No autorizado' }), { status: 401 });
-  if (user.role !== 'admin' && user.role !== 'veterinario') {
-    return new Response(JSON.stringify({ error: 'Sin permiso' }), { status: 403 });
-  }
+  const guardErr = requirePermission(user, 'vaccines', 'write');
+  if (guardErr) return guardErr;
 
   const parsed = await parseJsonBody(request);
   if ('error' in parsed) return parsed.error;
@@ -57,7 +66,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const newVaccine = await db.transaction(async (tx) => {
       const [vaccine] = await tx.insert(vaccines).values({
         patientId,
-        veterinarianId: user.id,
+        veterinarianId: user!.id,
         name,
         brand: brand ?? null,
         batchNumber: batchNumber ?? null,
@@ -103,7 +112,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
           referenceType: 'vaccine',
           referenceId: vaccine.id,
           locationId: locationId ?? null,
-          userId: user.id,
+          userId: user!.id,
         });
       }
 

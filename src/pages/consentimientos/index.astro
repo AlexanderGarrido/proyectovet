@@ -1,0 +1,12 @@
+---
+import DashboardLayout from '../../layouts/DashboardLayout.astro';
+import { ConsentList } from '../../components/consents/ConsentList';
+
+const user = Astro.locals.user;
+if (!user) return Astro.redirect('/login');
+if (user.role === 'tutor') return Astro.redirect('/dashboard');
+---
+
+<DashboardLayout title="Consentimientos" pageTitle="Consentimientos Informados">
+  <ConsentList client:load />
+</DashboardLayout>

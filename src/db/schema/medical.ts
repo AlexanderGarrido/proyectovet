@@ -65,7 +65,24 @@ export const vaccines = pgTable('vaccines', {
   idxNextDoseDate: index('idx_vac_next_dose_date').on(t.nextDoseDate),
 }));
 
+// Fotos clínicas tomadas en terreno durante la consulta (lesiones,
+// dermatología, conducta) — comprimidas del lado del cliente antes de
+// subir (ver compressImage() en lib/image.ts) para no disparar el peso de
+// la base de datos como pasaría con fotos sin comprimir.
+export const medicalRecordAttachments = pgTable('medical_record_attachments', {
+  id: serial('id').primaryKey(),
+  medicalRecordId: integer('medical_record_id')
+    .notNull()
+    .references(() => medicalRecords.id, { onDelete: 'cascade' }),
+  photo: text('photo').notNull(), // data URL base64, ya comprimida
+  caption: varchar('caption', { length: 200 }),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  idxMedicalRecordId: index('idx_mr_attachments_record').on(t.medicalRecordId),
+}));
+
 export type MedicalRecord = typeof medicalRecords.$inferSelect;
 export type NewMedicalRecord = typeof medicalRecords.$inferInsert;
 export type Vaccine = typeof vaccines.$inferSelect;
 export type NewVaccine = typeof vaccines.$inferInsert;
+export type MedicalRecordAttachment = typeof medicalRecordAttachments.$inferSelect;

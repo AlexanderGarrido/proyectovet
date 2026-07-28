@@ -1,7 +1,7 @@
 ---
 import DashboardLayout from '../../layouts/DashboardLayout.astro';
 import { db } from '../../db';
-import { medicalRecords } from '../../db/schema/medical';
+import { medicalRecords, medicalRecordAttachments } from '../../db/schema/medical';
 import { patients, owners } from '../../db/schema/patients';
 import { users } from '../../db/schema/users';
 import { prescriptions } from '../../db/schema/prescriptions';
@@ -47,6 +47,11 @@ const rxList = await db
   .from(prescriptions)
   .where(eq(prescriptions.medicalRecordId, id))
   .orderBy(desc(prescriptions.date));
+
+const attachments = await db
+  .select({ id: medicalRecordAttachments.id, photo: medicalRecordAttachments.photo, caption: medicalRecordAttachments.caption })
+  .from(medicalRecordAttachments)
+  .where(eq(medicalRecordAttachments.medicalRecordId, id));
 
 const vs = record.vitalSigns as { temperature?: number; heartRate?: number; weight?: number; respiratoryRate?: number } | null;
 
@@ -138,6 +143,19 @@ const rxStatusColors: Record<string, string> = {
               <p class="text-xs text-muted-foreground mt-1">Peso</p>
             </div>
           )}
+        </div>
+      </div>
+    )}
+
+    {attachments.length > 0 && (
+      <div class="rounded-xl border bg-card p-6">
+        <h3 class="font-semibold mb-3">Fotos Clínicas</h3>
+        <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+          {attachments.map((a) => (
+            <a href={a.photo} target="_blank" rel="noopener noreferrer" class="aspect-square rounded-lg overflow-hidden border block">
+              <img src={a.photo} alt={a.caption || 'Foto clínica'} class="w-full h-full object-cover hover:opacity-90 transition-opacity" />
+            </a>
+          ))}
         </div>
       </div>
     )}

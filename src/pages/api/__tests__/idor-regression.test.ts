@@ -1,20 +1,27 @@
 /**
- * Tests de regresión para los hallazgos CRÍTICOS de la auditoría (2026-07-27):
+ * Tests de regresión para los hallazgos CRÍTICOS de la auditoría (2026-07-27)
+ * y para los IDOR encontrados después, al migrar endpoints a guard.ts:
  *
  * C1 — IDOR en /api/appointments: un tutor autenticado podía leer, modificar
  *      y cancelar las citas de CUALQUIER otro tutor (nombres, teléfonos,
  *      notas, dirección de visita), sin ningún chequeo de pertenencia.
  * C2 — /api/invoices/payment no verificaba rol: cualquier tutor autenticado
  *      podía registrar un pago falso y marcar cualquier factura como pagada.
+ * IDOR en /api/vaccines y /api/patients/[id]/co-owners: sin chequeo de
+ *      pertenencia, un tutor podía consultar las vacunas o los co-tutores de
+ *      CUALQUIER mascota cambiando el patientId en la URL.
+ * Regresión de la migración a guard.ts: GET /api/patients y GET /api/invoices
+ *      no filtran por pertenencia — deben rechazar a un tutor por completo
+ *      (que solo tiene el permiso ":own"), no solo a roles sin ningún permiso.
  *
  * Estos tests deben fallar si alguien vuelve a quitar el guard de permisos
- * o el filtro de pertenencia (ownerId) de estos endpoints.
+ * o el filtro de pertenencia de estos endpoints.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 function makeChain(resolvedValue: any[]) {
   const chain: any = {};
-  ['from', 'leftJoin', 'where', 'orderBy', 'limit', 'offset'].forEach((m) => {
+  ['from', 'leftJoin', 'innerJoin', 'where', 'orderBy', 'limit', 'offset'].forEach((m) => {
     chain[m] = vi.fn(() => chain);
   });
   chain.then = (resolve: any, reject: any) => Promise.resolve(resolvedValue).then(resolve, reject);
@@ -24,9 +31,17 @@ function makeChain(resolvedValue: any[]) {
 vi.mock('../../../db', () => ({ db: { select: vi.fn() } }));
 vi.mock('../../../lib/auth', () => ({ auth: {} }));
 
+const canTutorAccessPatientMock = vi.hoisted(() => vi.fn());
+vi.mock('../../../lib/ownership', () => ({ canTutorAccessPatient: canTutorAccessPatientMock }));
+
 import { db } from '../../../db';
 import { PUT as apptPUT, DELETE as apptDELETE, GET as apptDetailGET } from '../appointments/[id]';
 import { POST as paymentPOST } from '../invoices/payment';
+import { GET as vaccinesGET } from '../medical/vaccines';
+import { GET as coOwnersGET } from '../patients/[id]/co-owners';
+import { GET as patientsGET } from '../patients/index';
+import { GET as invoicesGET } from '../invoices/index';
+import { POST as ownersPOST } from '../owners/index';
 
 function queueSelectResults(...values: any[][]) {
   const select = vi.mocked(db.select);
@@ -48,6 +63,7 @@ const esteTutorOwnerId = 1;
 
 beforeEach(() => {
   vi.mocked(db.select).mockReset();
+  canTutorAccessPatientMock.mockReset();
 });
 
 describe('C1 — IDOR en /api/appointments/:id', () => {
@@ -154,5 +170,95 @@ describe('C2 — RBAC en /api/invoices/payment', () => {
       url: new URL('http://localhost/api/test'),
     } as any);
     expect(res.status).not.toBe(403);
+  });
+});
+
+describe('IDOR — GET /api/vaccines', () => {
+  it('403 para tutor cuando la mascota no es suya', async () => {
+    canTutorAccessPatientMock.mockResolvedValue(false);
+    const res = await vaccinesGET({
+      request: new Request('http://localhost/api/test?patientId=42'),
+      locals: { user: tutorUser, session: {} },
+      url: new URL('http://localhost/api/test?patientId=42'),
+    } as any);
+    expect(res.status).toBe(403);
+    expect(canTutorAccessPatientMock).toHaveBeenCalledWith('tutor-1', 42);
+  });
+
+  it('200 para tutor cuando la mascota SÍ es suya (dueño o co-tutor)', async () => {
+    canTutorAccessPatientMock.mockResolvedValue(true);
+    queueSelectResults([]);
+    const res = await vaccinesGET({
+      request: new Request('http://localhost/api/test?patientId=42'),
+      locals: { user: tutorUser, session: {} },
+      url: new URL('http://localhost/api/test?patientId=42'),
+    } as any);
+    expect(res.status).toBe(200);
+  });
+
+  it('200 para staff sin chequeo de pertenencia', async () => {
+    queueSelectResults([]);
+    const res = await vaccinesGET({
+      request: new Request('http://localhost/api/test?patientId=42'),
+      locals: { user: { id: 'staff-1', role: 'veterinario' }, session: {} },
+      url: new URL('http://localhost/api/test?patientId=42'),
+    } as any);
+    expect(res.status).toBe(200);
+    expect(canTutorAccessPatientMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('IDOR — GET /api/patients/:id/co-owners', () => {
+  it('403 para tutor cuando la mascota no es suya', async () => {
+    canTutorAccessPatientMock.mockResolvedValue(false);
+    const res = await coOwnersGET({
+      params: { id: '42' },
+      locals: { user: tutorUser, session: {} },
+    } as any);
+    expect(res.status).toBe(403);
+  });
+
+  it('200 para tutor cuando la mascota SÍ es suya', async () => {
+    canTutorAccessPatientMock.mockResolvedValue(true);
+    queueSelectResults([]);
+    const res = await coOwnersGET({
+      params: { id: '42' },
+      locals: { user: tutorUser, session: {} },
+    } as any);
+    expect(res.status).toBe(200);
+  });
+});
+
+describe('Regresión — listados sin filtro de pertenencia no deben aceptar tutor', () => {
+  it('GET /api/patients → 403 para tutor (solo tiene "patients:read:own")', async () => {
+    const res = await patientsGET({
+      request: new Request('http://localhost/api/test'),
+      locals: { user: tutorUser, session: {} },
+      url: new URL('http://localhost/api/test'),
+    } as any);
+    expect(res.status).toBe(403);
+    expect(db.select).not.toHaveBeenCalled();
+  });
+
+  it('GET /api/invoices → 403 para tutor (solo tiene "invoices:read:own")', async () => {
+    const res = await invoicesGET({
+      request: new Request('http://localhost/api/test'),
+      locals: { user: tutorUser, session: {} },
+      url: new URL('http://localhost/api/test'),
+    } as any);
+    expect(res.status).toBe(403);
+    expect(db.select).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/owners — antes sin ningún chequeo de rol', () => {
+  it('403 para tutor (antes: cualquier usuario autenticado podía crear fichas de tutor)', async () => {
+    const res = await ownersPOST({
+      request: jsonRequest('POST', { firstName: 'X', lastName: 'Y', email: 'x@y.com' }),
+      locals: { user: tutorUser, session: {} },
+      url: new URL('http://localhost/api/test'),
+    } as any);
+    expect(res.status).toBe(403);
+    expect(db.select).not.toHaveBeenCalled();
   });
 });

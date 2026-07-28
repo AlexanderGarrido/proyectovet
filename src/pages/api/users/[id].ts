@@ -40,22 +40,28 @@ export const PUT: APIRoute = async ({ params, request, locals }) => {
 
   const [before] = await db.select({ role: users.role, isActive: users.isActive, name: users.name }).from(users).where(eq(users.id, id));
 
-  const updateData: Record<string, unknown> = {};
-  if (name) updateData.name = name;
-  if (email) updateData.email = email;
-  if (role) updateData.role = role;
-  if (isActive !== undefined) updateData.isActive = isActive;
-  if (Object.keys(updateData).length > 0) await db.update(users).set(updateData).where(eq(users.id, id));
+  // Las tres escrituras (datos de usuario, cierre de sesiones al desactivar,
+  // password) deben quedar todas o ninguna: antes corrían sueltas, y si la
+  // 2a o 3a fallaba a mitad de camino, el usuario quedaba en un estado a
+  // medio actualizar (ej. rol cambiado pero sesiones viejas sin cerrar).
+  const hashedPassword = password ? await hashPassword(password) : null;
+  await db.transaction(async (tx) => {
+    const updateData: Record<string, unknown> = {};
+    if (name) updateData.name = name;
+    if (email) updateData.email = email;
+    if (role) updateData.role = role;
+    if (isActive !== undefined) updateData.isActive = isActive;
+    if (Object.keys(updateData).length > 0) await tx.update(users).set(updateData).where(eq(users.id, id));
 
-  // Al desactivar, cerrar las sesiones del usuario para cortar el acceso ya.
-  if (isActive === false) {
-    await db.delete(sessions).where(eq(sessions.userId, id));
-  }
+    // Al desactivar, cerrar las sesiones del usuario para cortar el acceso ya.
+    if (isActive === false) {
+      await tx.delete(sessions).where(eq(sessions.userId, id));
+    }
 
-  if (password) {
-    const hashed = await hashPassword(password);
-    await db.update(accounts).set({ password: hashed }).where(eq(accounts.userId, id));
-  }
+    if (hashedPassword) {
+      await tx.update(accounts).set({ password: hashedPassword }).where(eq(accounts.userId, id));
+    }
+  });
 
   if (role && before && role !== before.role) {
     await logAudit({

@@ -12,7 +12,7 @@ import {
   index,
 } from 'drizzle-orm/pg-core';
 import { users } from './users';
-import { patients } from './patients';
+import { patients, owners } from './patients';
 
 export const appointmentTypeEnum = pgEnum('type', [
   'consulta',
@@ -39,7 +39,13 @@ export const appointments = pgTable('appointments', {
   patientId: integer('patient_id')
     .notNull()
     .references(() => patients.id),
-  ownerId: integer('owner_id').notNull(),
+  // Antes sin FK: nada impedía guardar un ownerId que no existiera en
+  // `owners`. Sin integridad referencial en una columna que además decide
+  // qué citas puede ver un tutor (ver IDOR fix), un valor huérfano ahí
+  // podría filtrar o esconder datos silenciosamente.
+  ownerId: integer('owner_id')
+    .notNull()
+    .references(() => owners.id),
   veterinarianId: varchar('veterinarian_id', { length: 36 })
     .notNull()
     .references(() => users.id),

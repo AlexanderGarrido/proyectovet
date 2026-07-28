@@ -1,0 +1,19 @@
+---
+import DashboardLayout from '../../layouts/DashboardLayout.astro';
+import { ConsentForm } from '../../components/consents/ConsentForm';
+
+const user = Astro.locals.user;
+if (!user) return Astro.redirect('/login');
+if (user.role !== 'admin' && user.role !== 'veterinario') return Astro.redirect('/dashboard');
+
+const patientId = Astro.url.searchParams.get('patientId');
+---
+
+<DashboardLayout title="Nuevo Consentimiento" pageTitle="Consentimiento Informado">
+  <div class="mb-6">
+    <a href="/consentimientos" class="text-sm text-muted-foreground hover:text-foreground transition-colors">← Volver a Consentimientos</a>
+  </div>
+  <div class="max-w-2xl rounded-xl border bg-card p-6">
+    <ConsentForm client:load patientId={patientId ? Number(patientId) : undefined} />
+  </div>
+</DashboardLayout>

@@ -1,0 +1,12 @@
+---
+import DashboardLayout from '../../layouts/DashboardLayout.astro';
+import { StockLocations } from '../../components/inventory/StockLocations';
+
+const user = Astro.locals.user;
+if (!user) return Astro.redirect('/login');
+if (!['admin', 'veterinario', 'recepcionista'].includes(user.role)) return Astro.redirect('/dashboard');
+---
+
+<DashboardLayout title="Botiquín Itinerante" pageTitle="Botiquín Itinerante">
+  <StockLocations client:load userRole={user.role} />
+</DashboardLayout>

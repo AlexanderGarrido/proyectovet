@@ -5,10 +5,13 @@ import { patients, owners } from '../../../db/schema/patients';
 import { users } from '../../../db/schema/users';
 import { eq, gte, lte, and, desc } from 'drizzle-orm';
 import { appointmentSchema, zodError } from '../../../lib/schemas';
+import { requirePermission } from '../../../lib/guard';
+import { jsonError, jsonOk } from '../../../lib/http';
 
 export const GET: APIRoute = async ({ request, locals }) => {
   const user = locals.user;
-  if (!user) return new Response(JSON.stringify({ error: 'No autorizado' }), { status: 401 });
+  const guardErr = requirePermission(user, 'appointments', 'read');
+  if (guardErr) return guardErr;
 
   const url = new URL(request.url);
   const from = url.searchParams.get('from');
@@ -21,13 +24,22 @@ export const GET: APIRoute = async ({ request, locals }) => {
   const conditions = [];
   if (from) conditions.push(gte(appointments.scheduledAt, new Date(from)));
   if (to) conditions.push(lte(appointments.scheduledAt, new Date(to)));
-  const VALID_STATUSES = ['programada', 'confirmada', 'en_curso', 'completada', 'cancelada', 'no_asistio'] as const;
+  const VALID_STATUSES = ['programada', 'confirmada', 'en_camino', 'en_curso', 'completada', 'cancelada', 'no_asistio'] as const;
   type AppointmentStatus = typeof VALID_STATUSES[number];
   if (status) {
     if (!VALID_STATUSES.includes(status as AppointmentStatus)) {
-      return new Response(JSON.stringify({ error: 'Estado inválido' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      return jsonError(400, 'Estado inválido');
     }
     conditions.push(eq(appointments.status, status as AppointmentStatus));
+  }
+
+  // SEGURIDAD (IDOR): un tutor solo puede ver las citas de su propia ficha
+  // de tutor — nunca las de otros. Sin este filtro, cualquier tutor podía
+  // listar todas las citas de la clínica (nombres, teléfonos, notas de otros).
+  if (user!.role === 'tutor') {
+    const [owner] = await db.select({ id: owners.id }).from(owners).where(eq(owners.userId, user!.id));
+    if (!owner) return jsonOk([]);
+    conditions.push(eq(appointments.ownerId, owner.id));
   }
 
   const result = await db
@@ -58,26 +70,19 @@ export const GET: APIRoute = async ({ request, locals }) => {
     .limit(limit)
     .offset(offset);
 
-  return new Response(JSON.stringify(result), {
-    headers: { 'Content-Type': 'application/json' },
-  });
+  return jsonOk(result);
 };
-
-const STAFF_ROLES_WRITE = ['admin', 'veterinario', 'recepcionista'];
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const user = locals.user;
-  if (!user) return new Response(JSON.stringify({ error: 'No autorizado' }), { status: 401 });
-  if (!STAFF_ROLES_WRITE.includes(user.role)) {
-    return new Response(JSON.stringify({ error: 'Sin permiso' }), { status: 403 });
-  }
+  const guardErr = requirePermission(user, 'appointments', 'write');
+  if (guardErr) return guardErr;
 
   const body = await request.json();
   const parsed = appointmentSchema.safeParse(body);
   if (!parsed.success) return zodError(parsed.error);
 
-  const { patientId, ownerId, veterinarianId, scheduledAt, endAt, type, reason, notes } = parsed.data;
-  const visitAddress = body.visitAddress || null;
+  const { patientId, ownerId, veterinarianId, scheduledAt, endAt, type, reason, notes, visitAddress } = parsed.data;
 
   const [newAppt] = await db.insert(appointments).values({
     patientId,
@@ -88,10 +93,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     type,
     reason,
     notes,
-    visitAddress,
+    visitAddress: visitAddress || null,
   }).returning();
-  return new Response(JSON.stringify(newAppt), {
-    status: 201,
-    headers: { 'Content-Type': 'application/json' },
-  });
+  return jsonOk(newAppt, 201);
 };

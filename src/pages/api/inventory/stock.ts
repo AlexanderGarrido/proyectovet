@@ -1,16 +1,23 @@
 import type { APIRoute } from 'astro';
 import { db } from '../../../db';
 import { products, stockMovements } from '../../../db/schema/inventory';
-import { eq } from 'drizzle-orm';
+import { eq, and, gte, sql } from 'drizzle-orm';
 import { stockMovementSchema, zodError } from '../../../lib/schemas';
+import { jsonError, jsonOk } from '../../../lib/http';
 
 const STAFF_ROLES = ['admin', 'veterinario', 'recepcionista'];
 
+class StockOpError extends Error {
+  constructor(message: string, public status: number) {
+    super(message);
+  }
+}
+
 export const POST: APIRoute = async ({ request, locals }) => {
   const user = locals.user;
-  if (!user) return new Response(JSON.stringify({ error: 'No autorizado' }), { status: 401 });
+  if (!user) return jsonError(401, 'No autorizado');
   if (!STAFF_ROLES.includes(user.role)) {
-    return new Response(JSON.stringify({ error: 'Sin permiso' }), { status: 403 });
+    return jsonError(403, 'Sin permiso');
   }
 
   const body = await request.json();
@@ -19,27 +26,44 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   const { productId, type, quantity, reason } = parsed.data;
 
-  const [product] = await db.select().from(products).where(eq(products.id, productId));
-  if (!product) return new Response(JSON.stringify({ error: 'Producto no encontrado' }), { status: 404 });
-
   // stock/quantity son columnas decimal → llegan como string desde la BD;
   // sumarlas directo concatenaría texto en vez de sumar.
   const isOutflow = type === 'salida' || type === 'consumo_interno';
   const delta = isOutflow ? -quantity : quantity;
-  const newStock = parseFloat(product.stock) + delta;
 
-  if (newStock < 0) {
-    return new Response(JSON.stringify({ error: 'Stock insuficiente' }), { status: 400 });
-  }
+  try {
+    const updated = await db.transaction(async (tx) => {
+      // BUGFIX (condición de carrera): antes se leía el stock, se calculaba
+      // el nuevo valor en JS y se escribía en un UPDATE aparte. Dos descuentos
+      // concurrentes (dos vets en terreno) podían pisarse el resultado uno al
+      // otro (lost update) y dejar el stock descuadrado o negativo pese al
+      // chequeo previo. Ahora la resta es atómica en el propio UPDATE, y el
+      // WHERE con gte(...,0) evita el negativo aunque compitan varias
+      // solicitudes al mismo tiempo — Postgres serializa la fila.
+      const [product] = await tx
+        .update(products)
+        .set({ stock: sql`${products.stock} + ${delta}` })
+        .where(and(
+          eq(products.id, productId),
+          gte(sql`${products.stock} + ${delta}`, sql`0`),
+        ))
+        .returning();
 
-  const updated = await db.transaction(async (tx) => {
-    await tx.update(products).set({ stock: String(newStock) }).where(eq(products.id, productId));
-    await tx.insert(stockMovements).values({
-      productId, type, quantity: String(quantity), reason: reason || null, userId: user.id,
+      if (!product) {
+        const [exists] = await tx.select({ id: products.id }).from(products).where(eq(products.id, productId));
+        throw new StockOpError(exists ? 'Stock insuficiente' : 'Producto no encontrado', exists ? 400 : 404);
+      }
+
+      await tx.insert(stockMovements).values({
+        productId, type, quantity: String(quantity), reason: reason || null, userId: user.id,
+      });
+
+      return product;
     });
-    const [result] = await tx.select().from(products).where(eq(products.id, productId));
-    return result;
-  });
 
-  return new Response(JSON.stringify(updated), { headers: { 'Content-Type': 'application/json' } });
+    return jsonOk(updated);
+  } catch (err) {
+    if (err instanceof StockOpError) return jsonError(err.status, err.message);
+    throw err;
+  }
 };

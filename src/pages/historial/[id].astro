@@ -18,6 +18,7 @@ const [record] = await db
     id: medicalRecords.id,
     date: medicalRecords.date,
     reason: medicalRecords.reason,
+    subjective: medicalRecords.subjective,
     diagnosis: medicalRecords.diagnosis,
     treatment: medicalRecords.treatment,
     observations: medicalRecords.observations,
@@ -143,18 +144,25 @@ const rxStatusColors: Record<string, string> = {
 
     <!-- Clinical notes -->
     <div class="rounded-xl border bg-card p-6 space-y-4">
-      <h3 class="font-semibold">Notas Clínicas</h3>
+      <h3 class="font-semibold">Notas Clínicas <span class="font-normal text-xs text-muted-foreground">(formato SOAP)</span></h3>
+
+      {record.subjective && (
+        <div>
+          <p class="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">S — Subjetivo (reportado por el tutor)</p>
+          <p class="text-sm whitespace-pre-wrap">{record.subjective}</p>
+        </div>
+      )}
 
       {record.diagnosis && (
         <div>
-          <p class="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Diagnóstico</p>
+          <p class="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">A — Evaluación (diagnóstico)</p>
           <p class="text-sm whitespace-pre-wrap">{record.diagnosis}</p>
         </div>
       )}
 
       {record.treatment && (
         <div>
-          <p class="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Tratamiento</p>
+          <p class="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">P — Plan (tratamiento)</p>
           <p class="text-sm whitespace-pre-wrap">{record.treatment}</p>
         </div>
       )}
@@ -166,7 +174,7 @@ const rxStatusColors: Record<string, string> = {
         </div>
       )}
 
-      {!record.diagnosis && !record.treatment && !record.observations && (
+      {!record.subjective && !record.diagnosis && !record.treatment && !record.observations && (
         <p class="text-sm text-muted-foreground">Sin notas adicionales registradas.</p>
       )}
     </div>

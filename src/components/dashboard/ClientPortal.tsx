@@ -87,7 +87,7 @@ interface PortalData {
 
 const typeLabels: Record<string, string> = {
   consulta: 'Consulta', vacunacion: 'Vacunación', cirugia: 'Cirugía',
-  control: 'Control', emergencia: 'Emergencia', grooming: 'Grooming',
+  control: 'Control', emergencia: 'Emergencia', desparasitacion: 'Desparasitación', grooming: 'Grooming',
 };
 
 const labTypeLabels: Record<string, string> = {

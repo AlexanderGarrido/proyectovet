@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, X, Clock, User, PawPrint, Stethoscope, FileText, MapPin, Calendar } from 'lucide-react';
+import { googleMapsUrl, wazeUrl, appleMapsUrl } from '../../lib/maps';
 
 interface Appointment {
   id: number;
@@ -300,14 +301,20 @@ export function AppointmentCalendar() {
                   <Row icon={<MapPin className="h-4 w-4 text-muted-foreground" />}>
                     <div>
                       <p className="text-muted-foreground">{selected.visitAddress}</p>
-                      <a
-                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selected.visitAddress)}`}
-                        target="_blank" rel="noopener noreferrer"
-                        className="text-xs text-primary hover:underline"
-                        onClick={e => e.stopPropagation()}
-                      >
-                        Ver en Google Maps ↗
-                      </a>
+                      <div className="flex items-center gap-3 mt-0.5">
+                        <a href={googleMapsUrl(selected.visitAddress)} target="_blank" rel="noopener noreferrer"
+                          className="text-xs text-primary hover:underline" onClick={e => e.stopPropagation()}>
+                          Google Maps ↗
+                        </a>
+                        <a href={wazeUrl(selected.visitAddress)} target="_blank" rel="noopener noreferrer"
+                          className="text-xs text-primary hover:underline" onClick={e => e.stopPropagation()}>
+                          Waze ↗
+                        </a>
+                        <a href={appleMapsUrl(selected.visitAddress)} target="_blank" rel="noopener noreferrer"
+                          className="text-xs text-primary hover:underline" onClick={e => e.stopPropagation()}>
+                          Apple Maps ↗
+                        </a>
+                      </div>
                     </div>
                   </Row>
                 )}

@@ -19,6 +19,7 @@ interface Appointment {
 const STATUS_STYLES: Record<string, string> = {
   programada:   'bg-blue-100 border-blue-300 text-blue-800',
   confirmada:   'bg-green-100 border-green-300 text-green-800',
+  en_camino:    'bg-purple-100 border-purple-300 text-purple-800',
   en_curso:     'bg-yellow-100 border-yellow-300 text-yellow-800',
   completada:   'bg-gray-100 border-gray-300 text-gray-600',
   cancelada:    'bg-red-100 border-red-300 text-red-700',
@@ -27,6 +28,7 @@ const STATUS_STYLES: Record<string, string> = {
 const STATUS_LABEL: Record<string, string> = {
   programada:  'Programada',
   confirmada:  'Confirmada',
+  en_camino:   'En camino',
   en_curso:    'En curso',
   completada:  'Completada',
   cancelada:   'Cancelada',

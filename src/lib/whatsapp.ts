@@ -66,5 +66,6 @@ export const appointmentTypeLabels: Record<string, string> = {
   cirugia: 'Cirugía',
   control: 'Control',
   emergencia: 'Emergencia',
+  desparasitacion: 'Desparasitación',
   grooming: 'Grooming',
 };

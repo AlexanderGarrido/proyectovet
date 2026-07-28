@@ -51,7 +51,7 @@ const statusColors: Record<string, string> = {
 
 const typeLabels: Record<string, string> = {
   consulta: 'Consulta', vacunacion: 'Vacunación', cirugia: 'Cirugía',
-  control: 'Control', emergencia: 'Emergencia', grooming: 'Grooming',
+  control: 'Control', emergencia: 'Emergencia', desparasitacion: 'Desparasitación', grooming: 'Grooming',
 };
 
 export function AppointmentList() {

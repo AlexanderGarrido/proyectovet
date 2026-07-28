@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
 import { db } from '../../../db';
 import { products, stockMovements } from '../../../db/schema/inventory';
-import { eq, like, or, lte, desc } from 'drizzle-orm';
+import { eq, ilike, or, lte, desc, and } from 'drizzle-orm';
 
 export const GET: APIRoute = async ({ request, locals }) => {
   const user = locals.user;
@@ -18,10 +18,9 @@ export const GET: APIRoute = async ({ request, locals }) => {
   let query = db.select().from(products).$dynamic();
 
   const conditions = [eq(products.isActive, true)];
-  if (search) conditions.push(or(like(products.name, `%${search}%`), like(products.sku, `%${search}%`)) as any);
+  if (search) conditions.push(or(ilike(products.name, `%${search}%`), ilike(products.sku, `%${search}%`)) as any);
   if (category) conditions.push(eq(products.category, category as any));
 
-  const { and } = await import('drizzle-orm');
   query = query.where(and(...conditions));
 
   if (lowStock) {

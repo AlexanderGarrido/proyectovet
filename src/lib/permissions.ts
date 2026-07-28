@@ -18,6 +18,12 @@ const permissions: Record<UserRole, Permission[]> = {
     'appointments:write',
     'vaccines:read',
     'vaccines:write',
+    'invoices:read',
+    // El vet en el domicilio necesita poder cobrar en el momento (efectivo o
+    // link de pago), no solo recepción/admin desde la clínica.
+    'payments:read',
+    'payments:write',
+    'inventory:read',
     'dashboard:read',
   ],
   recepcionista: [

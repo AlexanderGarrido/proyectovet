@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Clock, MapPin, Navigation, CalendarX } from 'lucide-react';
 import { Skeleton } from '../ui/skeleton';
 import { EmptyState } from '../ui/empty-state';
+import { googleMapsUrl, wazeUrl } from '../../lib/maps';
 
 interface Appointment {
   id: number;
@@ -88,9 +89,9 @@ export function NextAppointment() {
   }
 
   const date = new Date(appt.scheduledAt);
-  const mapsUrl = appt.visitAddress
-    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(appt.visitAddress + ', Talca, Chile')}`
-    : null;
+  const fullAddress = appt.visitAddress ? `${appt.visitAddress}, Talca, Chile` : null;
+  const mapsUrl = fullAddress ? googleMapsUrl(fullAddress) : null;
+  const wazeLink = fullAddress ? wazeUrl(fullAddress) : null;
 
   return (
     <div className="rounded-xl border bg-card p-6">
@@ -132,15 +133,29 @@ export function NextAppointment() {
             )}
           </div>
           {mapsUrl && (
-            <a
-              href={mapsUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className="shrink-0 flex items-center gap-1 text-xs px-3 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-            >
-              <Navigation className="h-3.5 w-3.5" /> Ir
-            </a>
+            <div className="shrink-0 flex items-center gap-1.5">
+              <a
+                href={mapsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="flex items-center gap-1 text-xs px-3 py-2.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+              >
+                <Navigation className="h-3.5 w-3.5" /> Ir
+              </a>
+              {wazeLink && (
+                <a
+                  href={wazeLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  aria-label="Ir con Waze"
+                  className="flex items-center justify-center h-11 w-11 rounded-lg border hover:bg-muted transition-colors text-xs font-semibold"
+                >
+                  Waze
+                </a>
+              )}
+            </div>
           )}
         </div>
       </a>

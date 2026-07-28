@@ -41,10 +41,10 @@ function timeAgo(iso: string): string {
 
 const TYPE_LABELS: Record<string, string> = {
   consulta: 'Consulta', vacunacion: 'Vacunación', cirugia: 'Cirugía',
-  control: 'Control', emergencia: 'Emergencia', grooming: 'Grooming',
+  control: 'Control', emergencia: 'Emergencia', desparasitacion: 'Desparasitación', grooming: 'Grooming',
 };
 const STATUS_LABELS: Record<string, string> = {
-  programada: 'Programada', confirmada: 'Confirmada', en_curso: 'En Curso',
+  programada: 'Programada', confirmada: 'Confirmada', en_camino: 'En Camino', en_curso: 'En Curso',
   completada: 'Completada', cancelada: 'Cancelada', no_asistio: 'No Asistió',
 };
 const COLORS = ['#2563eb', '#16a34a', '#d97706', '#dc2626', '#7c3aed', '#0891b2'];

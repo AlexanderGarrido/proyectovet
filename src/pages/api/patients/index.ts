@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
 import { db } from '../../../db';
 import { patients, owners } from '../../../db/schema/patients';
-import { eq, like, or, desc, sql } from 'drizzle-orm';
+import { eq, ilike, or, desc, sql } from 'drizzle-orm';
 import { patientSchema, zodError } from '../../../lib/schemas';
 
 const STAFF_ROLES = ['admin', 'veterinario', 'recepcionista'];
@@ -43,7 +43,7 @@ export const GET: APIRoute = async ({ request, locals }) => {
       ownerId
         ? eq(patients.ownerId, Number(ownerId))
         : search
-        ? or(like(patients.name, `%${search}%`), like(patients.breed, `%${search}%`))
+        ? or(ilike(patients.name, `%${search}%`), ilike(patients.breed, `%${search}%`))
         : undefined
     )
     .orderBy(desc(patients.createdAt))

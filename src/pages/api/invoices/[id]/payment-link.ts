@@ -5,7 +5,9 @@ import { owners } from '../../../../db/schema/patients';
 import { eq } from 'drizzle-orm';
 import { createInvoicePaymentLink } from '../../../../lib/payments/mercadopago';
 
-const STAFF_ROLES = ['admin', 'recepcionista'];
+// El veterinario en el domicilio también debe poder generar el link de pago
+// en el momento — antes solo admin/recepcionista podían, desde la clínica.
+const STAFF_ROLES = ['admin', 'recepcionista', 'veterinario'];
 
 export const POST: APIRoute = async ({ params, locals }) => {
   const user = locals.user;

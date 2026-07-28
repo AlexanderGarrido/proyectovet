@@ -8,6 +8,7 @@ import { eq } from 'drizzle-orm';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { buildWhatsappLink, buildAppointmentReminderMessage, appointmentTypeLabels } from '../../lib/whatsapp';
+import { googleMapsUrl, wazeUrl, appleMapsUrl } from '../../lib/maps';
 
 const user = Astro.locals.user;
 if (!user) return Astro.redirect('/login');
@@ -32,7 +33,7 @@ if (!appt) return Astro.redirect('/citas');
 
 const typeLabels: Record<string, string> = {
   consulta: 'Consulta', vacunacion: 'Vacunación', cirugia: 'Cirugía',
-  control: 'Control', emergencia: 'Emergencia', grooming: 'Grooming',
+  control: 'Control', emergencia: 'Emergencia', desparasitacion: 'Desparasitación', grooming: 'Grooming',
 };
 
 const statusColors: Record<string, string> = {
@@ -105,14 +106,17 @@ const whatsappReminderLink = buildWhatsappLink(
             <dt class="text-muted-foreground shrink-0">Dirección visita</dt>
             <dd class="text-right">
               <span>{appt.visitAddress}</span>
-              <a
-                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(appt.visitAddress)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                class="block text-xs text-primary hover:underline mt-0.5"
-              >
-                Ver en Google Maps ↗
-              </a>
+              <div class="flex items-center gap-3 justify-end mt-0.5">
+                <a href={googleMapsUrl(appt.visitAddress)} target="_blank" rel="noopener noreferrer" class="text-xs text-primary hover:underline">
+                  Google Maps ↗
+                </a>
+                <a href={wazeUrl(appt.visitAddress)} target="_blank" rel="noopener noreferrer" class="text-xs text-primary hover:underline">
+                  Waze ↗
+                </a>
+                <a href={appleMapsUrl(appt.visitAddress)} target="_blank" rel="noopener noreferrer" class="text-xs text-primary hover:underline">
+                  Apple Maps ↗
+                </a>
+              </div>
             </dd>
           </div>
         )}

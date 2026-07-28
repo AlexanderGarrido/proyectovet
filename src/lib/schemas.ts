@@ -16,7 +16,7 @@ export type OwnerInput = z.infer<typeof ownerSchema>;
 export const patientSchema = z.object({
   ownerId:         z.number().int().positive('Tutor requerido'),
   name:            z.string().min(1, 'Nombre requerido').max(100),
-  species:         z.enum(['perro', 'gato', 'ave', 'conejo', 'reptil', 'otro']),
+  species:         z.enum(['perro', 'gato', 'ave', 'conejo', 'reptil', 'roedor', 'otro']),
   breed:           z.string().max(100).optional().nullable(),
   color:           z.string().max(50).optional().nullable(),
   sex:             z.enum(['macho', 'hembra', 'desconocido']).optional().nullable(),
@@ -38,13 +38,16 @@ export const appointmentSchema = z.object({
   type:            z.enum(['consulta', 'vacunacion', 'cirugia', 'control', 'emergencia', 'desparasitacion', 'grooming']),
   reason:          z.string().max(500).optional().nullable(),
   notes:           z.string().max(1000).optional().nullable(),
+  // SEGURIDAD: antes se leía del body crudo sin pasar por Zod (sin límite de
+  // longitud ni tipo). Es el campo central de la atención a domicilio.
+  visitAddress:    z.string().max(500).optional().nullable(),
 }).refine(data => new Date(data.endAt) > new Date(data.scheduledAt), {
   message: 'La hora de fin debe ser posterior a la de inicio',
   path: ['endAt'],
 });
 
 export const appointmentStatusSchema = z.object({
-  status: z.enum(['programada', 'confirmada', 'en_curso', 'completada', 'cancelada', 'no_asistio']),
+  status: z.enum(['programada', 'confirmada', 'en_camino', 'en_curso', 'completada', 'cancelada', 'no_asistio']),
 });
 
 export type AppointmentInput = z.infer<typeof appointmentSchema>;
@@ -56,6 +59,7 @@ export const medicalRecordSchema = z.object({
   appointmentId:  z.number().int().positive().optional().nullable(),
   date:           z.string().min(1),
   reason:         z.string().min(1, 'Motivo requerido').max(500),
+  subjective:     z.string().max(2000).optional().nullable(),
   diagnosis:      z.string().max(500).optional().nullable(),
   treatment:      z.string().max(1000).optional().nullable(),
   observations:   z.string().max(1000).optional().nullable(),
@@ -109,6 +113,22 @@ export const stockMovementSchema = z.object({
 
 export type StockMovementInput = z.infer<typeof stockMovementSchema>;
 
+// ── Botiquín itinerante (ubicaciones de inventario) ────────────────────────
+export const stockLocationSchema = z.object({
+  name: z.string().min(1, 'Nombre requerido').max(100),
+  type: z.enum(['central', 'vehiculo']),
+  assignedVetId: z.string().min(1).optional().nullable(),
+});
+export type StockLocationInput = z.infer<typeof stockLocationSchema>;
+
+export const stockTransferSchema = z.object({
+  productId: z.number().int().positive(),
+  toLocationId: z.number().int().positive(),
+  fromLocationId: z.number().int().positive().optional().nullable(),
+  quantity: z.coerce.number().positive('Cantidad debe ser mayor a 0'),
+});
+export type StockTransferInput = z.infer<typeof stockTransferSchema>;
+
 // ── Invoices ──────────────────────────────────────────────────────────────────
 export const invoiceItemSchema = z.object({
   description: z.string().min(1, 'Descripción requerida').max(300),
@@ -153,7 +173,7 @@ export type OwnerFormData = z.infer<typeof ownerFormSchema>;
 export const patientFormSchema = z.object({
   ownerId:         z.string().min(1, 'Selecciona un tutor'),
   name:            z.string().min(1, 'El nombre es requerido').max(100),
-  species:         z.enum(['perro', 'gato', 'ave', 'reptil', 'roedor', 'otro']),
+  species:         z.enum(['perro', 'gato', 'ave', 'conejo', 'reptil', 'roedor', 'otro']),
   sex:             z.enum(['macho', 'hembra']),
   breed:           z.string().max(100).optional(),
   color:           z.string().max(50).optional(),
@@ -171,7 +191,7 @@ export const appointmentFormSchema = z.object({
   veterinarianId: z.string().min(1, 'Selecciona un veterinario'),
   scheduledAt:    z.string().min(1, 'Fecha y hora requerida'),
   endAt:          z.string().min(1, 'Hora de fin requerida'),
-  type:           z.enum(['consulta', 'vacunacion', 'cirugia', 'control', 'emergencia', 'grooming']),
+  type:           z.enum(['consulta', 'vacunacion', 'cirugia', 'control', 'emergencia', 'desparasitacion', 'grooming']),
   visitAddress:   z.string().max(500).optional(),
   reason:         z.string().max(500).optional(),
   notes:          z.string().max(1000).optional(),
@@ -181,6 +201,7 @@ export type AppointmentFormData = z.infer<typeof appointmentFormSchema>;
 export const medicalRecordFormSchema = z.object({
   patientId:       z.string().min(1, 'Selecciona un paciente'),
   reason:          z.string().min(1, 'El motivo es requerido'),
+  subjective:      z.string().optional(),
   diagnosis:       z.string().optional(),
   treatment:       z.string().optional(),
   observations:    z.string().optional(),
@@ -218,7 +239,7 @@ export const appointmentUpdateSchema = z.object({
   scheduledAt:   z.string().optional(),
   endAt:         z.string().optional(),
   type:          z.enum(['consulta', 'vacunacion', 'cirugia', 'control', 'emergencia', 'desparasitacion', 'grooming']).optional(),
-  status:        z.enum(['programada', 'confirmada', 'en_curso', 'completada', 'cancelada', 'no_asistio']).optional(),
+  status:        z.enum(['programada', 'confirmada', 'en_camino', 'en_curso', 'completada', 'cancelada', 'no_asistio']).optional(),
   reason:        z.string().max(500).optional().nullable(),
   notes:         z.string().max(1000).optional().nullable(),
   veterinarianId: z.string().optional(),
@@ -262,6 +283,7 @@ export const medicalRecordCreateSchema = z.object({
   appointmentId: z.coerce.number().int().positive().optional().nullable(),
   date: z.string().optional(),
   reason: z.string().min(1, 'El motivo es requerido').max(500),
+  subjective: z.string().max(2000).optional().nullable(),
   diagnosis: z.string().max(2000).optional().nullable(),
   treatment: z.string().max(2000).optional().nullable(),
   observations: z.string().max(2000).optional().nullable(),
@@ -276,6 +298,9 @@ export const medicalRecordCreateSchema = z.object({
   suppliesUsed: z.array(z.object({
     productId: z.number().int().positive(),
     quantity: z.coerce.number().positive('Cantidad debe ser mayor a 0'),
+    // Botiquín itinerante: si se indica, descuenta del stock de esa
+    // ubicación (ej. el vehículo del vet) además del total del producto.
+    locationId: z.number().int().positive().optional().nullable(),
   })).optional().nullable(),
 });
 
@@ -288,6 +313,11 @@ export const vaccineCreateSchema = z.object({
   applicationDate: z.string().min(1, 'La fecha es requerida'),
   nextDoseDate: z.string().optional().nullable(),
   notes: z.string().max(1000).optional().nullable(),
+  // Si se vincula a un producto del inventario (categoría "vacuna"), la
+  // dosis aplicada descuenta stock automáticamente — antes esto no existía
+  // y las vacunas nunca afectaban el inventario.
+  productId: z.coerce.number().int().positive().optional().nullable(),
+  locationId: z.coerce.number().int().positive().optional().nullable(),
 });
 
 // ── Lab Order Create (POST) ──────────────────────────────────────────────────
@@ -334,7 +364,7 @@ export type ClientProfileInput = z.infer<typeof clientProfileSchema>;
 
 export const clientPetSchema = z.object({
   name:        z.string().min(1, 'Nombre requerido').max(100),
-  species:     z.enum(['perro', 'gato', 'ave', 'conejo', 'reptil', 'roedor', 'otro']),
+  species:     z.enum(['perro', 'gato', 'ave', 'conejo', 'reptil', 'roedor', 'otro']), // ya alineado con el enum de BD
   sex:         z.enum(['macho', 'hembra', 'desconocido']).optional().nullable(),
   breed:       z.string().max(100).optional().nullable(),
   color:       z.string().max(50).optional().nullable(),

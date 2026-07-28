@@ -11,6 +11,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { users } from './users';
 import { patients } from './patients';
+import { products } from './inventory';
 
 export const medicalRecords = pgTable('medical_records', {
   id: serial('id').primaryKey(),
@@ -23,6 +24,9 @@ export const medicalRecords = pgTable('medical_records', {
   appointmentId: integer('appointment_id'),
   date: timestamp('date').notNull(),
   reason: varchar('reason', { length: 255 }).notNull(),
+  // Campo "Subjetivo" del formato SOAP: lo que el tutor reporta/observa en
+  // casa (motivo narrado), distinto de "reason" (motivo corto de agenda).
+  subjective: text('subjective'),
   diagnosis: text('diagnosis'),
   treatment: text('treatment'),
   observations: text('observations'),
@@ -52,6 +56,10 @@ export const vaccines = pgTable('vaccines', {
   applicationDate: date('application_date').notNull(),
   nextDoseDate: date('next_dose_date'),
   notes: text('notes'),
+  // Vincula la dosis aplicada con el producto del inventario (categoría
+  // "vacuna") para poder descontar automáticamente el stock del botiquín.
+  // Opcional: nullable para no romper vacunas ya registradas sin vínculo.
+  productId: integer('product_id').references(() => products.id),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 }, (t) => ({
   idxNextDoseDate: index('idx_vac_next_dose_date').on(t.nextDoseDate),

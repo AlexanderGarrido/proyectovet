@@ -147,6 +147,7 @@ export function PatientForm({ patientId, defaultOwnerId }: Props) {
             <option value="perro">Perro</option>
             <option value="gato">Gato</option>
             <option value="ave">Ave</option>
+            <option value="conejo">Conejo</option>
             <option value="reptil">Reptil</option>
             <option value="roedor">Roedor</option>
             <option value="otro">Otro</option>

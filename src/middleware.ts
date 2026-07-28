@@ -5,7 +5,9 @@ import { jsonError } from './lib/http';
 import { STAFF_ROUTES } from './lib/permissions';
 
 // '/api/cron' se autentica por su cuenta con CRON_SECRET (Bearer), no por sesión.
-const publicRoutes = ['/', '/login', '/register', '/api/auth', '/api/cron'];
+// '/api/payments/webhook' se autentica con la firma HMAC de Mercado Pago
+// (x-signature) — MP lo llama server-to-server, sin nuestra cookie de sesión.
+const publicRoutes = ['/', '/login', '/register', '/api/auth', '/api/cron', '/api/payments/webhook'];
 
 function isPublicRoute(pathname: string): boolean {
   return publicRoutes.some(

@@ -1,0 +1,17 @@
+{
+  "name": "Alma Veterinaria",
+  "short_name": "Alma Vet",
+  "description": "Sistema de gestión veterinaria a domicilio",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#ffffff",
+  "theme_color": "#4C5C3F",
+  "lang": "es-CL",
+  "icons": [
+    { "src": "/favicon-32.png", "sizes": "88x88", "type": "image/png" },
+    { "src": "/logo-alma-mark.png", "sizes": "272x272", "type": "image/png" },
+    { "src": "/apple-touch-icon.png", "sizes": "460x460", "type": "image/png", "purpose": "any" }
+  ]
+}

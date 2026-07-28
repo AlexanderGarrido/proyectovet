@@ -58,6 +58,7 @@ export function MedicalRecordForm({ patientId, appointmentId }: { patientId?: nu
         patientId: Number(data.patientId),
         appointmentId: appointmentId || null,
         reason: data.reason,
+        subjective: data.subjective,
         diagnosis: data.diagnosis,
         treatment: data.treatment,
         observations: data.observations,
@@ -92,8 +93,21 @@ export function MedicalRecordForm({ patientId, appointmentId }: { patientId?: nu
         {errors.reason && <p className="text-red-500 text-xs mt-1">{errors.reason.message}</p>}
       </div>
 
+      {/* Formato SOAP: Subjetivo → Objetivo (signos vitales) → Evaluación (diagnóstico) → Plan (tratamiento) */}
       <div>
-        <p className="text-sm font-medium mb-2">Signos vitales</p>
+        <label className="block text-sm font-medium mb-1">
+          <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-primary/10 text-primary text-xs font-bold mr-1.5">S</span>
+          Subjetivo <span className="font-normal text-muted-foreground">— lo que reporta el tutor</span>
+        </label>
+        <textarea {...register('subjective')} rows={2} placeholder="Ej.: el tutor reporta que el paciente lleva 2 días con menos apetito y algo decaído..."
+          className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none" />
+      </div>
+
+      <div>
+        <p className="text-sm font-medium mb-2">
+          <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-primary/10 text-primary text-xs font-bold mr-1.5">O</span>
+          Objetivo <span className="font-normal text-muted-foreground">— signos vitales</span>
+        </p>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div>
             <label className="block text-xs text-muted-foreground mb-1">Temperatura (°C)</label>
@@ -159,17 +173,23 @@ export function MedicalRecordForm({ patientId, appointmentId }: { patientId?: nu
       </div>
 
       <div>
-        <label className="block text-sm font-medium mb-1">Diagnóstico</label>
+        <label className="block text-sm font-medium mb-1">
+          <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-primary/10 text-primary text-xs font-bold mr-1.5">A</span>
+          Evaluación <span className="font-normal text-muted-foreground">— diagnóstico</span>
+        </label>
         <textarea {...register('diagnosis')} rows={3} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none" />
       </div>
 
       <div>
-        <label className="block text-sm font-medium mb-1">Tratamiento</label>
+        <label className="block text-sm font-medium mb-1">
+          <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-primary/10 text-primary text-xs font-bold mr-1.5">P</span>
+          Plan <span className="font-normal text-muted-foreground">— tratamiento</span>
+        </label>
         <textarea {...register('treatment')} rows={3} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none" />
       </div>
 
       <div>
-        <label className="block text-sm font-medium mb-1">Observaciones</label>
+        <label className="block text-sm font-medium mb-1">Observaciones adicionales</label>
         <textarea {...register('observations')} rows={2} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none" />
       </div>
 

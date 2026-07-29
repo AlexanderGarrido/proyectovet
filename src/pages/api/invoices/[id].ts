@@ -5,10 +5,21 @@ import { owners } from '../../../db/schema/patients';
 import { eq, desc } from 'drizzle-orm';
 import { invoiceUpdateSchema, zodError, parseJsonBody } from '../../../lib/schemas';
 import { logAudit } from '../../../lib/audit';
+import { requirePermission, requireUnscopedPermission } from '../../../lib/guard';
+
+// SEGURIDAD (IDOR): antes solo exigía sesión — cualquier tutor autenticado
+// podía leer cualquier factura ajena (montos, pagos) y, peor, marcar
+// cualquier factura como "pagada" o "anulada" por PUT sin verificar rol.
+// El portal del tutor ya trae sus propias facturas embebidas en
+// /api/client/portal; no hay ningún flujo de UI que llame este endpoint
+// para un tutor. requireUnscopedPermission rechaza a tutor por completo en
+// el GET (solo tiene "invoices:read:own"); requirePermission rechaza el
+// PUT directamente (tutor no tiene "invoices:write" en ninguna forma).
 
 export const GET: APIRoute = async ({ params, locals }) => {
   const user = locals.user;
-  if (!user) return new Response(JSON.stringify({ error: 'No autorizado' }), { status: 401 });
+  const guardErr = requireUnscopedPermission(user, 'invoices', 'read');
+  if (guardErr) return guardErr;
 
   const id = Number(params.id);
   if (!id || isNaN(id) || id <= 0) {
@@ -48,7 +59,8 @@ export const GET: APIRoute = async ({ params, locals }) => {
 
 export const PUT: APIRoute = async ({ params, request, locals }) => {
   const user = locals.user;
-  if (!user) return new Response(JSON.stringify({ error: 'No autorizado' }), { status: 401 });
+  const guardErr = requirePermission(user, 'invoices', 'write');
+  if (guardErr) return guardErr;
 
   const id = Number(params.id);
   if (!id || isNaN(id) || id <= 0) {
@@ -65,7 +77,7 @@ export const PUT: APIRoute = async ({ params, request, locals }) => {
 
   if (status === 'anulada' && before?.status !== 'anulada') {
     await logAudit({
-      userId: user.id, userName: user.name, action: 'invoice.void',
+      userId: user!.id, userName: user!.name, action: 'invoice.void',
       entityType: 'invoice', entityId: id, metadata: { invoiceNumber: before?.invoiceNumber, previousStatus: before?.status },
     });
   }

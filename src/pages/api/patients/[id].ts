@@ -6,10 +6,19 @@ import { appointments } from '../../../db/schema/appointments';
 import { eq, desc } from 'drizzle-orm';
 import { patientUpdateSchema, zodError, parseJsonBody } from '../../../lib/schemas';
 import { logAudit } from '../../../lib/audit';
+import { requirePermission, requireUnscopedPermission } from '../../../lib/guard';
+
+// SEGURIDAD (IDOR): antes solo exigía sesión — cualquier tutor autenticado
+// podía leer/modificar/desactivar la ficha de CUALQUIER paciente (ficha
+// completa, foto, notas) cambiando el id en la URL. No hay ningún flujo de
+// UI para tutores contra este endpoint (usan /api/client/pets); el propio
+// PatientForm.tsx de staff es el único llamador real. requireUnscopedPermission
+// rechaza a tutor por completo en vez de dejarlo pasar por la variante ":own".
 
 export const GET: APIRoute = async ({ params, locals }) => {
   const user = locals.user;
-  if (!user) return new Response(JSON.stringify({ error: 'No autorizado' }), { status: 401 });
+  const guardErr = requireUnscopedPermission(user, 'patients', 'read');
+  if (guardErr) return guardErr;
 
   const id = Number(params.id);
   if (!id || isNaN(id) || id <= 0) {
@@ -52,7 +61,8 @@ export const GET: APIRoute = async ({ params, locals }) => {
 
 export const PUT: APIRoute = async ({ params, request, locals }) => {
   const user = locals.user;
-  if (!user) return new Response(JSON.stringify({ error: 'No autorizado' }), { status: 401 });
+  const guardErr = requirePermission(user, 'patients', 'write');
+  if (guardErr) return guardErr;
 
   const id = Number(params.id);
   if (!id || isNaN(id) || id <= 0) {

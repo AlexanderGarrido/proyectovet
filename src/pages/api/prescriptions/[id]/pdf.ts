@@ -7,10 +7,14 @@ import { eq } from 'drizzle-orm';
 import { renderToStream } from '@react-pdf/renderer';
 import { createElement } from 'react';
 import { PrescriptionPDF } from '../../../../lib/pdf/prescription-template';
+import { requireUnscopedPermission } from '../../../../lib/guard';
 
+// SEGURIDAD (IDOR): antes solo exigía sesión — cualquier tutor autenticado
+// podía descargar el PDF de cualquier receta ajena por su id.
 export const GET: APIRoute = async ({ params, locals }) => {
   const user = locals.user;
-  if (!user) return new Response('No autorizado', { status: 401 });
+  const guardErr = requireUnscopedPermission(user, 'prescriptions', 'read');
+  if (guardErr) return guardErr;
 
   const id = Number(params.id);
   const [rx] = await db

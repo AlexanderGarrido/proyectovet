@@ -4,10 +4,17 @@ import { vaccines } from '../../../db/schema/medical';
 import { patients, owners } from '../../../db/schema/patients';
 import { eq, lte, isNotNull, and } from 'drizzle-orm';
 import { sql } from 'drizzle-orm';
+import { requireUnscopedPermission } from '../../../lib/guard';
 
+// SEGURIDAD (IDOR): antes solo exigía sesión — cualquier tutor autenticado
+// podía listar TODAS las próximas dosis de vacunas de la clínica (nombre,
+// teléfono de cada tutor). Es el widget operativo de recordatorios del
+// dashboard de staff, no algo por-tutor — requireUnscopedPermission rechaza
+// a tutor (solo tiene "vaccines:read:own") en vez de dejarlo pasar.
 export const GET: APIRoute = async ({ locals }) => {
   const user = locals.user;
-  if (!user) return new Response(JSON.stringify({ error: 'No autorizado' }), { status: 401 });
+  const guardErr = requireUnscopedPermission(user, 'vaccines', 'read');
+  if (guardErr) return guardErr;
 
   const in30Days = new Date();
   in30Days.setDate(in30Days.getDate() + 30);

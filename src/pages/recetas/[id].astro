@@ -52,7 +52,7 @@ const statusColors: Record<string, string> = {
           <span class={`px-3 py-1 rounded-full text-xs font-medium capitalize ${statusColors[rx.status] || 'bg-gray-100'}`}>
             {rx.status}
           </span>
-          <a href={`/api/prescriptions/${rx.id}/pdf`} target="_blank"
+          <a href={`/api/prescriptions/${rx.id}/pdf`} target="_blank" data-astro-prefetch="false"
             class="flex items-center gap-1.5 text-sm px-3 py-1.5 border rounded-lg hover:bg-muted transition-colors">
             📄 PDF
           </a>

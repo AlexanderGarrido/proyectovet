@@ -228,6 +228,7 @@ export function PetProfile({ pet }: { pet: Pet }) {
                 href={`/api/patients/${pet.id}/vaccine-card`}
                 target="_blank"
                 rel="noopener noreferrer"
+                data-astro-prefetch="false"
                 className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border hover:bg-muted/40 transition-colors"
               >
                 <Download className="h-3.5 w-3.5" /> Descargar carnet de vacunas

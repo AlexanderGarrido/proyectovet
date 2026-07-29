@@ -4,9 +4,18 @@ import { veterinarianSchedules } from '../../../db/schema/appointments';
 import { users } from '../../../db/schema/users';
 import { eq } from 'drizzle-orm';
 
+// No mapea a un recurso de permissions.ts (como veterinarians/index.ts, a
+// propósito no migrado a guard.ts): son los horarios internos de cada
+// veterinario, información operativa de la clínica, no algo que un tutor
+// (que solo tiene "appointments:read:own") deba poder listar.
+const STAFF_ROLES = ['admin', 'veterinario', 'recepcionista'];
+
 export const GET: APIRoute = async ({ request, locals }) => {
   const user = locals.user;
   if (!user) return new Response(JSON.stringify({ error: 'No autorizado' }), { status: 401 });
+  if (!STAFF_ROLES.includes(user.role)) {
+    return new Response(JSON.stringify({ error: 'Acceso denegado' }), { status: 403 });
+  }
 
   const url = new URL(request.url);
   const vetId = url.searchParams.get('veterinarianId');

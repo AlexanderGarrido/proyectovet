@@ -4,10 +4,19 @@ import { owners, patients } from '../../../db/schema/patients';
 import { eq } from 'drizzle-orm';
 import { ownerUpdateSchema, zodError, parseJsonBody } from '../../../lib/schemas';
 import { logAudit } from '../../../lib/audit';
+import { requirePermission } from '../../../lib/guard';
+
+// SEGURIDAD (IDOR): antes solo exigía sesión — cualquier tutor autenticado
+// podía leer/modificar la ficha de CUALQUIER otro tutor (email, teléfono,
+// dirección, documento de identidad). Los tutores editan su propio contacto
+// vía /api/client/profile, nunca este endpoint — es 100% de staff.
+// hasPermission ya rechaza tutor (no tiene 'owners' en absoluto), sin
+// necesitar la variante "unscoped".
 
 export const GET: APIRoute = async ({ params, locals }) => {
   const user = locals.user;
-  if (!user) return new Response(JSON.stringify({ error: 'No autorizado' }), { status: 401 });
+  const guardErr = requirePermission(user, 'owners', 'read');
+  if (guardErr) return guardErr;
 
   const id = Number(params.id);
   if (!id || isNaN(id) || id <= 0) {
@@ -24,7 +33,8 @@ export const GET: APIRoute = async ({ params, locals }) => {
 
 export const PUT: APIRoute = async ({ params, request, locals }) => {
   const user = locals.user;
-  if (!user) return new Response(JSON.stringify({ error: 'No autorizado' }), { status: 401 });
+  const guardErr = requirePermission(user, 'owners', 'write');
+  if (guardErr) return guardErr;
 
   const id = Number(params.id);
   if (!id || isNaN(id) || id <= 0) {

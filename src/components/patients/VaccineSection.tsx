@@ -99,6 +99,7 @@ export function VaccineSection({ patientId, canEdit }: { patientId: number; canE
             href={`/api/patients/${patientId}/vaccine-card`}
             target="_blank"
             rel="noopener noreferrer"
+            data-astro-prefetch="false"
             className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors"
           >
             <Download className="h-3.5 w-3.5" /> Carnet PDF

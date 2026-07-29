@@ -262,8 +262,12 @@ export const prescriptionUpdateSchema = z.object({
 });
 export type PrescriptionUpdateInput = z.infer<typeof prescriptionUpdateSchema>;
 
+// El enum de BD (db/schema/prescriptions.ts labOrderStatusEnum) usa
+// "solicitado" como estado inicial — este schema tenía "pendiente", un
+// valor que no existe en la BD. Enviar 'solicitado' se rechazaba con 400 y
+// no había forma de devolver una orden a su estado inicial.
 export const labOrderUpdateSchema = z.object({
-  status:  z.enum(['pendiente', 'en_proceso', 'completado', 'cancelado']).optional(),
+  status:  z.enum(['solicitado', 'en_proceso', 'completado', 'cancelado']).optional(),
   results: z.string().max(2000).optional().nullable(),
 });
 export type LabOrderUpdateInput = z.infer<typeof labOrderUpdateSchema>;

@@ -59,7 +59,7 @@ const fmt = (n: string) => parseFloat(n).toLocaleString('es-CL', { maximumFracti
           <span class={`px-3 py-1 rounded-full text-xs font-medium ${statusColors[invoice.status] || 'bg-gray-100'}`}>
             {statusLabels[invoice.status] || invoice.status}
           </span>
-          <a href={`/api/invoices/${id}/pdf`} target="_blank"
+          <a href={`/api/invoices/${id}/pdf`} target="_blank" data-astro-prefetch="false"
             class="flex items-center gap-1.5 text-sm px-3 py-1.5 border rounded-lg hover:bg-muted transition-colors">
             📄 PDF
           </a>

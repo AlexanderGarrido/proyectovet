@@ -175,6 +175,7 @@ export function LabOrderList({ canWrite = false }: Props) {
                           href={`/api/lab-orders/${order.id}/pdf`}
                           target="_blank"
                           rel="noopener noreferrer"
+                          data-astro-prefetch="false"
                           className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
                           title="Descargar PDF"
                         >
@@ -208,6 +209,7 @@ export function LabOrderList({ canWrite = false }: Props) {
                   href={`/api/lab-orders/${selected.id}/pdf`}
                   target="_blank"
                   rel="noopener noreferrer"
+                  data-astro-prefetch="false"
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium hover:bg-muted/50 transition-colors"
                 >
                   <FileDown className="h-3.5 w-3.5" />

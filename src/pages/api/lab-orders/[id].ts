@@ -3,10 +3,16 @@ import { db } from '../../../db';
 import { labOrders } from '../../../db/schema/prescriptions';
 import { eq } from 'drizzle-orm';
 import { labOrderUpdateSchema, zodError, parseJsonBody } from '../../../lib/schemas';
+import { requirePermission } from '../../../lib/guard';
 
+// SEGURIDAD (IDOR): antes solo exigía sesión — cualquier tutor autenticado
+// podía alterar el estado o los RESULTADOS de cualquier orden de
+// laboratorio ajena. Tutor no tiene "lab-orders:write" en ninguna forma,
+// así que requirePermission lo bloquea directamente.
 export const PUT: APIRoute = async ({ params, request, locals }) => {
   const user = locals.user;
-  if (!user) return new Response(JSON.stringify({ error: 'No autorizado' }), { status: 401 });
+  const guardErr = requirePermission(user, 'lab-orders', 'write');
+  if (guardErr) return guardErr;
 
   const id = Number(params.id);
   if (!id || isNaN(id) || id <= 0) {

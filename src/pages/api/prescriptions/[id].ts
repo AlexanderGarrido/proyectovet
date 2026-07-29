@@ -5,10 +5,16 @@ import { patients, owners } from '../../../db/schema/patients';
 import { users } from '../../../db/schema/users';
 import { eq } from 'drizzle-orm';
 import { prescriptionUpdateSchema, zodError, parseJsonBody } from '../../../lib/schemas';
+import { requirePermission, requireUnscopedPermission } from '../../../lib/guard';
 
+// SEGURIDAD (IDOR): antes solo exigía sesión — cualquier tutor autenticado
+// podía leer o modificar cualquier receta ajena. El portal ya trae las
+// recetas del tutor embebidas (con medicamentos) en /api/client/portal; no
+// hay ningún flujo de UI que llame este endpoint para un tutor.
 export const GET: APIRoute = async ({ params, locals }) => {
   const user = locals.user;
-  if (!user) return new Response(JSON.stringify({ error: 'No autorizado' }), { status: 401 });
+  const guardErr = requireUnscopedPermission(user, 'prescriptions', 'read');
+  if (guardErr) return guardErr;
 
   const id = Number(params.id);
   if (!id || isNaN(id) || id <= 0) {
@@ -35,7 +41,8 @@ export const GET: APIRoute = async ({ params, locals }) => {
 
 export const PUT: APIRoute = async ({ params, request, locals }) => {
   const user = locals.user;
-  if (!user) return new Response(JSON.stringify({ error: 'No autorizado' }), { status: 401 });
+  const guardErr = requirePermission(user, 'prescriptions', 'write');
+  if (guardErr) return guardErr;
 
   const id = Number(params.id);
   if (!id || isNaN(id) || id <= 0) {

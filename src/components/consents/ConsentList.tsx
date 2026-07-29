@@ -90,7 +90,7 @@ export function ConsentList() {
                   <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">{typeLabels[cf.type] || cf.type}</td>
                   <td className="px-4 py-3 text-muted-foreground hidden sm:table-cell">{cf.signedByName}</td>
                   <td className="px-4 py-3">
-                    <a href={`/api/consents/${cf.id}/pdf`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-primary hover:underline text-xs">
+                    <a href={`/api/consents/${cf.id}/pdf`} target="_blank" rel="noopener noreferrer" data-astro-prefetch="false" className="flex items-center gap-1 text-primary hover:underline text-xs">
                       <Download className="h-3.5 w-3.5" /> PDF
                     </a>
                   </td>

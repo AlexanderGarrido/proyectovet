@@ -43,6 +43,11 @@ const permissions: Record<UserRole, Permission[]> = {
     'appointments:read',
     'appointments:write',
     'consents:read',
+    // El widget de recordatorios de vacunas del dashboard ya se le mostraba
+    // a recepción (llama a los tutores para agendar el refuerzo) — sin este
+    // permiso, requireUnscopedPermission en /api/vaccines/upcoming la
+    // bloquearía, una regresión no intencional.
+    'vaccines:read',
     'invoices:read',
     'invoices:write',
     'payments:read',

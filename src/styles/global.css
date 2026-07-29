@@ -1,35 +1,42 @@
 @import "tailwindcss";
 
 @theme {
-  /* Alma Veterinaria — Bosque y terracota. Fiel al logo: verde olivo, salvia,
-     acento terracota/dorado y fondo crema. */
-  --color-primary: #4C5C3F;            /* Verde bosque */
-  --color-primary-foreground: #FFFFFF; /* blanco sobre verde */
-  --color-secondary: #E7EAD9;          /* salvia pálida */
-  --color-secondary-foreground: #2C3327;
-  --color-accent: #A9794E;             /* terracota / dorado */
-  --color-accent-foreground: #FFFFFF;
-  --color-muted: #EEEFE6;              /* crema-salvia muy claro */
-  --color-muted-foreground: #6E7763;   /* verde-salvia apagado */
-  --color-destructive: #BC4536;        /* rojo ladrillo */
+  /* Alma Veterinaria — rediseño "blanco + verde acento" (ref. Sistema de
+     Asistencia INACAP): fondo predominantemente blanco/neutro, con el verde
+     de marca funcionando como único color de acento (mismo rol que el rojo
+     en la referencia: botones primarios, ítem activo del menú, insignias de
+     ícono, foco). El verde se satura/aclara respecto al verde bosque
+     original para que "aparezca" sobre blanco tal como el rojo en la ref. */
+  --color-primary: #1F7A4D;            /* Verde Alma — acento principal */
+  --color-primary-foreground: #FFFFFF;
+  --color-secondary: #EEF2EC;          /* verde pálido — superficies secundarias */
+  --color-secondary-foreground: #1B211C;
+  --color-accent: #E7F3EA;             /* verde muy pálido — hover/estado activo sutil */
+  --color-accent-foreground: #15351F;
+  --color-muted: #F1F2EF;              /* gris neutro muy claro */
+  --color-muted-foreground: #6B7568;   /* gris con un dejo verde, mantiene carácter orgánico */
+  --color-destructive: #C0392B;        /* rojo — reservado a acciones destructivas reales */
   --color-destructive-foreground: #FFFFFF;
-  --color-border: #E4DFD1;             /* borde cálido sobre crema */
-  --color-input: #E4DFD1;
-  --color-ring: #4C5C3F;               /* foco verde */
-  --color-background: #F7F4EC;         /* crema */
-  --color-foreground: #2C3327;         /* tinta verde oscura */
+  --color-border: #E5E7E3;             /* borde neutro claro, como los cards de la referencia */
+  --color-input: #E5E7E3;
+  --color-ring: #1F7A4D;
+  --color-background: #F7F8F7;         /* blanco roto — igual que el fondo de página de la ref. */
+  --color-foreground: #1B1F1C;
   --color-card: #FFFFFF;
-  --color-card-foreground: #2C3327;
+  --color-card-foreground: #1B1F1C;
   --color-popover: #FFFFFF;
-  --color-popover-foreground: #2C3327;
-  --color-sidebar: #3E4B34;            /* verde profundo */
-  --color-sidebar-foreground: #F2EFE4; /* crema sobre verde */
-  --color-sidebar-accent: #54663E;     /* verde más claro (activo) */
-  --color-sidebar-border: #34402A;
-  --color-brand: #A9794E;              /* terracota (avatares/acentos de marca) */
+  --color-popover-foreground: #1B1F1C;
+  /* Sidebar blanca (antes verde sólido) — igual que la referencia: la marca
+     vive en el logo y en el acento verde de los ítems activos, no en un
+     panel lateral de color sólido. */
+  --color-sidebar: #FFFFFF;
+  --color-sidebar-foreground: #33372F;
+  --color-sidebar-accent: #E7F3EA;     /* píldora verde pálida del ítem activo */
+  --color-sidebar-border: #ECEEEA;
+  --color-brand: #1F7A4D;              /* avatares/insignias de marca — antes terracota */
   --color-brand-foreground: #FFFFFF;
-  --color-success: #4F7A3A;            /* verde */
-  --color-warning: #C8923D;            /* ámbar dorado */
+  --color-success: #2F9E52;
+  --color-warning: #C8923D;
 
   --radius-sm: 0.25rem;
   --radius-md: 0.375rem;
@@ -40,33 +47,36 @@
 }
 
 .dark {
-  --color-background: #1E211B;
-  --color-foreground: #ECEAE0;
-  --color-card: #262A22;
-  --color-card-foreground: #ECEAE0;
-  --color-popover: #262A22;
-  --color-popover-foreground: #ECEAE0;
-  --color-primary: #8CA36B;            /* verde salvia más claro (contraste en oscuro) */
-  --color-primary-foreground: #1A1E14;
-  --color-secondary: #2E342A;
+  /* La referencia no define modo oscuro; se mantiene un oscuro coherente
+     propio (no "sidebar blanca sobre fondo oscuro", que sería inconsistente)
+     usando el mismo verde de acento aclarado para contraste. */
+  --color-background: #15181A;
+  --color-foreground: #ECEFEA;
+  --color-card: #1C201C;
+  --color-card-foreground: #ECEFEA;
+  --color-popover: #1C201C;
+  --color-popover-foreground: #ECEFEA;
+  --color-primary: #4FBE81;
+  --color-primary-foreground: #0C1710;
+  --color-secondary: #242923;
   --color-secondary-foreground: #E4E6DA;
-  --color-muted: #2A2E25;
-  --color-muted-foreground: #A2A892;
-  --color-accent: #C2925F;             /* terracota más clara */
-  --color-accent-foreground: #1E1A14;
-  --color-destructive: #C75748;
+  --color-muted: #20241F;
+  --color-muted-foreground: #9CA599;
+  --color-accent: #26362A;
+  --color-accent-foreground: #BFE8CE;
+  --color-destructive: #E0574A;
   --color-destructive-foreground: #FFFFFF;
-  --color-border: #353A2E;
-  --color-input: #353A2E;
-  --color-ring: #8CA36B;
-  --color-sidebar: #1B1F17;
-  --color-sidebar-foreground: #DDE0D0;
-  --color-sidebar-accent: #2C3324;
-  --color-sidebar-border: #2A2E22;
-  --color-brand: #C2925F;
-  --color-brand-foreground: #1E1A14;
-  --color-success: #6E9A4E;
-  --color-warning: #C8923D;
+  --color-border: #2B2F28;
+  --color-input: #2B2F28;
+  --color-ring: #4FBE81;
+  --color-sidebar: #171A16;
+  --color-sidebar-foreground: #DCE0D8;
+  --color-sidebar-accent: #26362A;
+  --color-sidebar-border: #24281F;
+  --color-brand: #4FBE81;
+  --color-brand-foreground: #0C1710;
+  --color-success: #4FBE81;
+  --color-warning: #D9A44B;
 }
 
 @layer base {

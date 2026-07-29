@@ -21,9 +21,11 @@ export function StatCard({ title, value, description, icon: Icon, className, hre
     <>
       <div className="flex items-center justify-between">
         <p className="text-sm font-medium text-muted-foreground">{title}</p>
-        <Icon className="h-5 w-5 text-muted-foreground" />
+        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+          <Icon className="h-5 w-5 text-primary" />
+        </div>
       </div>
-      <div className="mt-2">
+      <div className="mt-3">
         <p className="text-2xl font-bold">{value}</p>
         {description && <p className="text-xs text-muted-foreground mt-1">{description}</p>}
       </div>

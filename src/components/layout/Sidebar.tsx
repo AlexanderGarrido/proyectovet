@@ -8,14 +8,12 @@ import {
   Receipt,
   BarChart3,
   Settings,
-  LogOut,
   Users,
   X,
   FileSignature,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { signOut } from '../../lib/auth-client';
 
 const iconMap: Record<string, LucideIcon> = {
   LayoutDashboard,
@@ -35,40 +33,45 @@ interface NavItem {
   label: string;
   href: string;
   icon: string;
+  section: string;
 }
 
 interface SidebarProps {
   navItems: NavItem[];
   currentPath: string;
-  userName: string;
-  userRole: string;
   isOpen: boolean;
   collapsed?: boolean;
   animated?: boolean;
   onClose: () => void;
 }
 
+/** Agrupa los ítems en secciones consecutivas, preservando el orden. */
+function groupBySection(items: NavItem[]): { section: string; items: NavItem[] }[] {
+  const groups: { section: string; items: NavItem[] }[] = [];
+  for (const item of items) {
+    const last = groups[groups.length - 1];
+    if (last && last.section === item.section) {
+      last.items.push(item);
+    } else {
+      groups.push({ section: item.section, items: [item] });
+    }
+  }
+  return groups;
+}
+
 export function Sidebar({
   navItems,
   currentPath,
-  userName,
-  userRole,
   isOpen,
   collapsed = false,
   animated = false,
   onClose,
 }: SidebarProps) {
-  const handleLogout = async () => {
-    await signOut();
-    window.location.href = '/login';
-  };
-
-  const roleLabels: Record<string, string> = {
-    admin: 'Administrador',
-    veterinario: 'Veterinario',
-    recepcionista: 'Recepcionista',
-    tutor: 'Tutor',
-  };
+  const groups = groupBySection(navItems);
+  // Con una sola sección (ej. el tutor solo tiene "Principal") el
+  // encabezado no aporta nada — se omite, igual que en la referencia no
+  // aparecería una única sección rotulada.
+  const showSectionLabels = groups.length > 1;
 
   return (
     <>
@@ -92,95 +95,76 @@ export function Sidebar({
           isOpen ? 'translate-x-0 w-64' : '-translate-x-full w-64'
         )}
       >
-        {/* Header / Logo */}
-        {collapsed ? (
-          <div className="flex items-center justify-center border-b border-sidebar-border shrink-0 h-14 px-2">
-            <div className="w-9 h-9 rounded-lg overflow-hidden bg-white flex items-center justify-center">
-              <img src="/logo-alma-mark.png" alt="Alma Veterinaria" className="w-full h-full object-contain" />
-            </div>
-          </div>
-        ) : (
-          <div className="border-b border-sidebar-border shrink-0 p-3">
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex-1 bg-white rounded-xl p-2.5 flex items-center justify-center">
-                <img src="/logoAlmaVet.jpg" alt="Alma Veterinaria" className="h-20 w-auto object-contain" />
-              </div>
-              <button
-                onClick={onClose}
-                className="lg:hidden p-1 rounded-md text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-white/10 transition-colors"
-                aria-label="Cerrar menú"
-              >
-                <X size={20} />
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Navigation */}
-        <nav aria-label="Menú principal" className="flex-1 p-2 space-y-1 overflow-y-auto">
-          {navItems.map((item) => {
-            const Icon = iconMap[item.icon] || LayoutDashboard;
-            const isActive =
-              currentPath === item.href ||
-              (item.href !== '/dashboard' && currentPath.startsWith(item.href));
-
-            return (
-              <a
-                key={item.href}
-                href={item.href}
-                aria-current={isActive ? 'page' : undefined}
-                title={collapsed ? item.label : undefined}
-                className={cn(
-                  'flex items-center rounded-lg text-sm font-medium transition-colors',
-                  collapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3 py-2',
-                  isActive
-                    ? 'bg-white/20 text-sidebar-foreground font-semibold'
-                    : 'text-sidebar-foreground/80 hover:bg-white/10 hover:text-sidebar-foreground'
-                )}
-              >
-                <Icon size={18} className="shrink-0" />
-                {!collapsed && item.label}
-              </a>
-            );
-          })}
-        </nav>
-
-        {/* User section */}
-        <div className="p-2 border-t border-sidebar-border">
-          <div className={cn(
-            'flex items-center px-2 py-2 mb-1',
-            collapsed ? 'justify-center' : 'gap-3'
-          )}>
-            <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold bg-brand text-brand-foreground shrink-0"
-              title={collapsed ? userName : undefined}>
-              {userName
-                .split(' ')
-                .map((n) => n[0])
-                .join('')
-                .toUpperCase()
-                .slice(0, 2)}
+        {/* Header / Logo — lockup compacto (marca + texto), no un banner
+            grande: sobre fondo blanco un banner ocuparía demasiado peso
+            visual, igual que la referencia usa un ícono pequeño + wordmark. */}
+        <div
+          className={cn(
+            'flex items-center border-b border-sidebar-border shrink-0 h-16',
+            collapsed ? 'justify-center px-2' : 'justify-between gap-2 px-4'
+          )}
+        >
+          <div className={cn('flex items-center min-w-0', collapsed ? '' : 'gap-2.5')}>
+            <div className="w-9 h-9 rounded-lg overflow-hidden shrink-0 bg-primary/10 flex items-center justify-center">
+              <img src="/logo-alma-mark.png" alt="" className="w-full h-full object-contain" />
             </div>
             {!collapsed && (
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">{userName}</p>
-                <p className="text-xs text-sidebar-foreground/70">
-                  {roleLabels[userRole] || userRole}
-                </p>
+              <div className="min-w-0">
+                <p className="text-sm font-bold leading-tight truncate">Alma Veterinaria</p>
+                <p className="text-xs text-muted-foreground leading-tight truncate">Panel de Gestión</p>
               </div>
             )}
           </div>
-          <button
-            onClick={handleLogout}
-            title={collapsed ? 'Cerrar sesión' : undefined}
-            className={cn(
-              'flex items-center w-full rounded-lg text-sm text-sidebar-foreground/70 hover:bg-white/10 hover:text-sidebar-foreground transition-colors',
-              collapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3 py-2'
-            )}
-          >
-            <LogOut size={18} className="shrink-0" />
-            {!collapsed && 'Cerrar sesion'}
-          </button>
+          {!collapsed && (
+            <button
+              onClick={onClose}
+              className="lg:hidden p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
+              aria-label="Cerrar menú"
+            >
+              <X size={20} />
+            </button>
+          )}
         </div>
+
+        {/* Navigation */}
+        <nav aria-label="Menú principal" className="flex-1 px-2 py-3 space-y-4 overflow-y-auto">
+          {groups.map((group) => (
+            <div key={group.section}>
+              {showSectionLabels && !collapsed && (
+                <p className="px-3 mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/80">
+                  {group.section}
+                </p>
+              )}
+              <div className="space-y-0.5">
+                {group.items.map((item) => {
+                  const Icon = iconMap[item.icon] || LayoutDashboard;
+                  const isActive =
+                    currentPath === item.href ||
+                    (item.href !== '/dashboard' && currentPath.startsWith(item.href));
+
+                  return (
+                    <a
+                      key={item.href}
+                      href={item.href}
+                      aria-current={isActive ? 'page' : undefined}
+                      title={collapsed ? item.label : undefined}
+                      className={cn(
+                        'flex items-center rounded-lg text-sm font-medium transition-colors',
+                        collapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3 py-2',
+                        isActive
+                          ? 'bg-sidebar-accent text-primary font-semibold'
+                          : 'text-sidebar-foreground/75 hover:bg-muted hover:text-sidebar-foreground'
+                      )}
+                    >
+                      <Icon size={18} className="shrink-0" />
+                      {!collapsed && item.label}
+                    </a>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </nav>
       </aside>
     </>
   );

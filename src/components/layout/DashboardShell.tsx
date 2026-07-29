@@ -7,6 +7,7 @@ interface NavItem {
   label: string;
   href: string;
   icon: string;
+  section: string;
 }
 
 interface DashboardShellProps {
@@ -52,8 +53,6 @@ export function DashboardShell({
       <Sidebar
         navItems={navItems}
         currentPath={currentPath}
-        userName={userName}
-        userRole={userRole}
         isOpen={sidebarOpen}
         collapsed={sidebarCollapsed}
         animated={ready}
@@ -62,6 +61,8 @@ export function DashboardShell({
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <Header
           title={pageTitle}
+          userName={userName}
+          userRole={userRole}
           onMenuToggle={() => setSidebarOpen(!sidebarOpen)}
           onSidebarCollapse={() => setSidebarCollapsed((c) => !c)}
         />

@@ -110,28 +110,33 @@ export const STAFF_ROUTES = [
   '/consentimientos',
 ];
 
+// Agrupación del menú lateral (mismo patrón que la referencia de diseño:
+// secciones con encabezado en mayúsculas — Principal/Gestión/Reportes/
+// Sistema). Sidebar.tsx solo imprime el encabezado de sección cuando hay
+// más de una sección presente, así el tutor (una sola sección) no ve
+// encabezados de sobra.
 export function getNavItems(role: UserRole) {
   // El rol tutor tiene acceso restringido: solo el dashboard (su portal).
   // Las páginas de gestión (pacientes, citas, recetas…) son herramientas de
   // staff y no están preparadas para mostrar solo datos propios del tutor.
   if (role === 'tutor') {
     return [
-      { label: 'Dashboard', href: '/dashboard', icon: 'LayoutDashboard' },
+      { label: 'Dashboard', href: '/dashboard', icon: 'LayoutDashboard', section: 'Principal' },
     ];
   }
 
   const allItems = [
-    { label: 'Dashboard', href: '/dashboard', icon: 'LayoutDashboard', permission: 'dashboard:read' },
-    { label: 'Pacientes', href: '/pacientes', icon: 'PawPrint', permission: 'patients:read' },
-    { label: 'Tutores', href: '/tutores', icon: 'Users', permission: 'owners:read' },
-    { label: 'Citas', href: '/citas', icon: 'Calendar', permission: 'appointments:read' },
-    { label: 'Recetas', href: '/recetas', icon: 'FileText', permission: 'prescriptions:read' },
-    { label: 'Consentimientos', href: '/consentimientos', icon: 'FileSignature', permission: 'consents:read' },
-    { label: 'Laboratorio', href: '/ordenes', icon: 'FlaskConical', permission: 'lab-orders:read' },
-    { label: 'Inventario', href: '/inventario', icon: 'Package', permission: 'inventory:read' },
-    { label: 'Facturacion', href: '/facturacion', icon: 'Receipt', permission: 'invoices:read' },
-    { label: 'Metricas', href: '/metricas', icon: 'BarChart3', permission: 'invoices:read' },
-    { label: 'Configuracion', href: '/configuracion', icon: 'Settings', permission: 'admin' },
+    { label: 'Dashboard', href: '/dashboard', icon: 'LayoutDashboard', permission: 'dashboard:read', section: 'Principal' },
+    { label: 'Pacientes', href: '/pacientes', icon: 'PawPrint', permission: 'patients:read', section: 'Gestión' },
+    { label: 'Tutores', href: '/tutores', icon: 'Users', permission: 'owners:read', section: 'Gestión' },
+    { label: 'Citas', href: '/citas', icon: 'Calendar', permission: 'appointments:read', section: 'Gestión' },
+    { label: 'Recetas', href: '/recetas', icon: 'FileText', permission: 'prescriptions:read', section: 'Gestión' },
+    { label: 'Consentimientos', href: '/consentimientos', icon: 'FileSignature', permission: 'consents:read', section: 'Gestión' },
+    { label: 'Laboratorio', href: '/ordenes', icon: 'FlaskConical', permission: 'lab-orders:read', section: 'Gestión' },
+    { label: 'Inventario', href: '/inventario', icon: 'Package', permission: 'inventory:read', section: 'Gestión' },
+    { label: 'Facturacion', href: '/facturacion', icon: 'Receipt', permission: 'invoices:read', section: 'Gestión' },
+    { label: 'Metricas', href: '/metricas', icon: 'BarChart3', permission: 'invoices:read', section: 'Reportes' },
+    { label: 'Configuracion', href: '/configuracion', icon: 'Settings', permission: 'admin', section: 'Sistema' },
   ];
 
   return allItems.filter((item) => {

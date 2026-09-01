@@ -6,7 +6,6 @@ import { products, stockMovements, stockByLocation } from '../../../db/schema/in
 import { eq, and, gte, sql, desc } from 'drizzle-orm';
 import { vaccineCreateSchema, zodError, parseJsonBody } from '../../../lib/schemas';
 import { jsonError, jsonOk } from '../../../lib/http';
-import { canTutorAccessPatient } from '../../../lib/ownership';
 import { requirePermission } from '../../../lib/guard';
 
 class StockOpError extends Error {
@@ -17,20 +16,14 @@ class StockOpError extends Error {
 
 export const GET: APIRoute = async ({ request, locals }) => {
   const user = locals.user;
-  // SEGURIDAD (IDOR): antes solo exigía sesión — cualquier tutor autenticado
-  // podía leer las vacunas de CUALQUIER mascota cambiando el patientId en la
-  // URL, sin verificar que fuera la suya.
+  // SEGURIDAD: endpoint de staff — requirePermission ya restringe el acceso a
+  // los roles con 'vaccines:read'.
   const guardErr = requirePermission(user, 'vaccines', 'read');
   if (guardErr) return guardErr;
 
   const url = new URL(request.url);
   const patientId = url.searchParams.get('patientId');
   if (!patientId) return jsonError(400, 'patientId requerido');
-
-  if (user!.role === 'tutor') {
-    const allowed = await canTutorAccessPatient(user!.id, Number(patientId));
-    if (!allowed) return jsonError(403, 'Sin permiso');
-  }
 
   const result = await db
     .select({

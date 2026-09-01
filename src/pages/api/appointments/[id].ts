@@ -45,12 +45,6 @@ export const GET: APIRoute = async ({ params, locals }) => {
 
   if (!appt) return jsonError(404, 'No encontrado');
 
-  // SEGURIDAD (IDOR): un tutor solo puede ver el detalle de sus propias citas.
-  if (user!.role === 'tutor') {
-    const [owner] = await db.select({ id: owners.id }).from(owners).where(eq(owners.userId, user!.id));
-    if (!owner || appt.ownerId !== owner.id) return jsonError(404, 'No encontrado');
-  }
-
   return jsonOk(appt);
 };
 

@@ -30,12 +30,7 @@ export const GET: APIRoute = async ({ params, locals }) => {
 
   if (!patient) return new Response('Paciente no encontrado', { status: 404 });
 
-  if (user.role === 'tutor') {
-    const [owner] = await db.select().from(owners).where(eq(owners.userId, user.id));
-    if (!owner || patient.ownerId !== owner.id) {
-      return new Response('Sin permiso', { status: 403 });
-    }
-  } else if (!STAFF_ROLES.includes(user.role)) {
+  if (!STAFF_ROLES.includes(user.role)) {
     return new Response('Sin permiso', { status: 403 });
   }
 

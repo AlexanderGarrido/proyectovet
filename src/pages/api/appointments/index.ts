@@ -33,15 +33,6 @@ export const GET: APIRoute = async ({ request, locals }) => {
     conditions.push(eq(appointments.status, status as AppointmentStatus));
   }
 
-  // SEGURIDAD (IDOR): un tutor solo puede ver las citas de su propia ficha
-  // de tutor — nunca las de otros. Sin este filtro, cualquier tutor podía
-  // listar todas las citas de la clínica (nombres, teléfonos, notas de otros).
-  if (user!.role === 'tutor') {
-    const [owner] = await db.select({ id: owners.id }).from(owners).where(eq(owners.userId, user!.id));
-    if (!owner) return jsonOk([]);
-    conditions.push(eq(appointments.ownerId, owner.id));
-  }
-
   const whereCondition = conditions.length > 0 ? and(...conditions) : undefined;
 
   const [result, [{ count }]] = await Promise.all([

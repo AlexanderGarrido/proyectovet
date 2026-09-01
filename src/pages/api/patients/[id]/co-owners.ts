@@ -5,24 +5,17 @@ import { patientCoOwners } from '../../../../db/schema/co-owners';
 import { eq, and } from 'drizzle-orm';
 import { parseJsonBody } from '../../../../lib/schemas';
 import { logAudit } from '../../../../lib/audit';
-import { canTutorAccessPatient } from '../../../../lib/ownership';
 import { requirePermission } from '../../../../lib/guard';
 
 export const GET: APIRoute = async ({ params, locals }) => {
   const user = locals.user;
-  // SEGURIDAD (IDOR): antes solo exigía sesión — cualquier tutor autenticado
-  // podía consultar los co-tutores de CUALQUIER mascota (nombre, teléfono,
-  // email de terceros) sin verificar pertenencia.
+  // SEGURIDAD: endpoint de staff — requirePermission restringe el acceso a los
+  // roles con 'patients:read'.
   const guardErr = requirePermission(user, 'patients', 'read');
   if (guardErr) return guardErr;
 
   const patientId = Number(params.id);
   if (!patientId || isNaN(patientId)) return new Response(JSON.stringify({ error: 'ID inválido' }), { status: 400 });
-
-  if (user!.role === 'tutor') {
-    const allowed = await canTutorAccessPatient(user!.id, patientId);
-    if (!allowed) return new Response(JSON.stringify({ error: 'Sin permiso' }), { status: 403 });
-  }
 
   const coOwners = await db
     .select({ id: owners.id, firstName: owners.firstName, lastName: owners.lastName, phone: owners.phone, email: owners.email })

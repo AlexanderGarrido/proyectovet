@@ -65,12 +65,6 @@ export function LoginForm() {
         {isSubmitting ? 'Iniciando sesion...' : 'Iniciar sesion'}
       </Button>
 
-      <p className="text-center text-sm text-muted-foreground">
-        No tienes cuenta?{' '}
-        <a href="/register" className="text-primary hover:underline">
-          Registrate
-        </a>
-      </p>
       <p className="text-center text-xs text-muted-foreground">
         ¿Olvidaste tu contraseña? Pídele a un administrador que te la restablezca.
       </p>

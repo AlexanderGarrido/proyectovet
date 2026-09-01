@@ -12,3 +12,7 @@ drizzle/
 .env*
 .superpowers/
 backups/
+
+# Grafo de conocimiento graphify: artefactos locales, no portables (rutas
+# absolutas en manifest.json). No versionar.
+.graphify/

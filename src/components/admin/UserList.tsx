@@ -8,11 +8,10 @@ const roleColors: Record<string, string> = {
   admin: 'bg-purple-100 text-purple-700',
   veterinario: 'bg-blue-100 text-blue-700',
   recepcionista: 'bg-cyan-100 text-cyan-700',
-  tutor: 'bg-gray-100 text-gray-600',
 };
 
 const roleLabels: Record<string, string> = {
-  admin: 'Administrador', veterinario: 'Veterinario', recepcionista: 'Recepcionista', tutor: 'Tutor',
+  admin: 'Administrador', veterinario: 'Veterinario', recepcionista: 'Recepcionista',
 };
 
 export function UserList({ currentUserId }: { currentUserId: string }) {
@@ -153,7 +152,6 @@ export function UserList({ currentUserId }: { currentUserId: string }) {
                     <option value="admin">Administrador</option>
                     <option value="veterinario">Veterinario</option>
                     <option value="recepcionista">Recepcionista</option>
-                    <option value="tutor">Tutor</option>
                   </select>
                 ) : (
                   <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${roleColors[u.role] || 'bg-gray-100'}`}>

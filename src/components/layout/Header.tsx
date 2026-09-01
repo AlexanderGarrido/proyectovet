@@ -16,7 +16,6 @@ const roleLabels: Record<string, string> = {
   admin: 'Administrador',
   veterinario: 'Veterinario',
   recepcionista: 'Recepcionista',
-  tutor: 'Tutor',
 };
 
 interface PatientResult { id: number; name: string; ownerFirstName?: string | null; ownerLastName?: string | null; }
@@ -24,7 +23,6 @@ interface OwnerResult { id: number; firstName: string; lastName: string; }
 
 export function Header({ title, userName, userRole, onMenuToggle, onSidebarCollapse }: HeaderProps) {
   const [dark, setDark] = useState(false);
-  const canSearch = userRole !== 'tutor';
 
   useEffect(() => {
     const saved = localStorage.getItem('theme');
@@ -69,11 +67,9 @@ export function Header({ title, userName, userRole, onMenuToggle, onSidebarColla
 
       <h1 className="text-lg font-semibold truncate shrink-0 hidden sm:block">{title}</h1>
 
-      {canSearch && (
-        <div className="flex-1 min-w-0 max-w-md">
-          <HeaderSearch />
-        </div>
-      )}
+      <div className="flex-1 min-w-0 max-w-md">
+        <HeaderSearch />
+      </div>
 
       <div className="ml-auto flex items-center gap-1.5 shrink-0">
         <OnlineStatus />

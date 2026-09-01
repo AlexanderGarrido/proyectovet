@@ -2,7 +2,6 @@ import { defineMiddleware } from 'astro:middleware';
 import { auth } from './lib/auth';
 import { rateLimit } from './lib/rateLimit';
 import { jsonError } from './lib/http';
-import { STAFF_ROUTES } from './lib/permissions';
 
 // '/api/cron' se autentica por su cuenta con CRON_SECRET (Bearer), no por sesión.
 // '/api/payments/webhook' se autentica con la firma HMAC de Mercado Pago
@@ -101,20 +100,6 @@ export const onRequest = defineMiddleware(async (context, next) => {
         return jsonError(403, 'Cuenta desactivada');
       }
       return context.redirect('/login?inactiva=1');
-    }
-
-    // Bloquear tutores en rutas de staff (páginas de gestión interna).
-    const role = (session.user as any).role;
-    if (role === 'tutor') {
-      const isStaffRoute = STAFF_ROUTES.some(
-        (route) => pathname === route || pathname.startsWith(route + '/')
-      );
-      if (isStaffRoute) {
-        if (pathname.startsWith('/api/')) {
-          return jsonError(403, 'Acceso restringido');
-        }
-        return context.redirect('/dashboard');
-      }
     }
 
     context.locals.user = session.user as any;

@@ -1,5 +1,10 @@
 import { pgTable, varchar, boolean, timestamp, pgEnum } from 'drizzle-orm/pg-core';
 
+// NOTA: el valor 'tutor' permanece en el enum de Postgres por compatibilidad de
+// la migración — retirar un valor de un enum PG obliga a recrear el tipo y
+// reescribir la columna. El rol tutor está retirado del producto: no se
+// referencia en el código (ver `UserRole`) y no hay filas que lo usen tras la
+// migración de cierre del portal.
 export const userRoleEnum = pgEnum('role', [
   'admin',
   'veterinario',
@@ -13,7 +18,7 @@ export const users = pgTable('users', {
   email: varchar('email', { length: 255 }).notNull().unique(),
   emailVerified: boolean('email_verified').notNull().default(false),
   image: varchar('image', { length: 512 }),
-  role: userRoleEnum('role').notNull().default('tutor'),
+  role: userRoleEnum('role').notNull().default('recepcionista'),
   phone: varchar('phone', { length: 20 }),
   isActive: boolean('is_active').notNull().default(true),
   createdAt: timestamp('created_at').notNull().defaultNow(),
@@ -62,4 +67,4 @@ export const verifications = pgTable('verifications', {
 
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
-export type UserRole = 'admin' | 'veterinario' | 'recepcionista' | 'tutor';
+export type UserRole = 'admin' | 'veterinario' | 'recepcionista';

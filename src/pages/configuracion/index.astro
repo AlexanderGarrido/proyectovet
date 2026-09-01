@@ -31,8 +31,8 @@ const allUsers = await db.select({
         <p class="text-2xl font-bold mt-1">{allUsers.filter(u => u.role === 'veterinario').length}</p>
       </div>
       <div class="rounded-xl border bg-card p-4">
-        <p class="text-sm text-muted-foreground">Tutores</p>
-        <p class="text-2xl font-bold mt-1">{allUsers.filter(u => u.role === 'tutor').length}</p>
+        <p class="text-sm text-muted-foreground">Recepción</p>
+        <p class="text-2xl font-bold mt-1">{allUsers.filter(u => u.role === 'recepcionista').length}</p>
       </div>
     </div>
 

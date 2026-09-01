@@ -275,7 +275,7 @@ export type LabOrderUpdateInput = z.infer<typeof labOrderUpdateSchema>;
 export const userUpdateSchema = z.object({
   name:     z.string().min(1).max(200).optional(),
   email:    z.string().email().optional(),
-  role:     z.enum(['admin', 'veterinario', 'recepcionista', 'tutor']).optional(),
+  role:     z.enum(['admin', 'veterinario', 'recepcionista']).optional(),
   password: z.string().min(8).max(100).optional(),
   isActive: z.boolean().optional(),
 });

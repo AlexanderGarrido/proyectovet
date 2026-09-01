@@ -1,21 +1,22 @@
 /**
- * Tests de regresión para los hallazgos CRÍTICOS de la auditoría (2026-07-27)
- * y para los IDOR encontrados después, al migrar endpoints a guard.ts:
+ * Tests de regresión para hallazgos CRÍTICOS de la auditoría (2026-07-27) y
+ * los IDOR encontrados después, al migrar endpoints a guard.ts.
  *
- * C1 — IDOR en /api/appointments: un tutor autenticado podía leer, modificar
- *      y cancelar las citas de CUALQUIER otro tutor (nombres, teléfonos,
- *      notas, dirección de visita), sin ningún chequeo de pertenencia.
- * C2 — /api/invoices/payment no verificaba rol: cualquier tutor autenticado
- *      podía registrar un pago falso y marcar cualquier factura como pagada.
- * IDOR en /api/vaccines y /api/patients/[id]/co-owners: sin chequeo de
- *      pertenencia, un tutor podía consultar las vacunas o los co-tutores de
- *      CUALQUIER mascota cambiando el patientId en la URL.
- * Regresión de la migración a guard.ts: GET /api/patients y GET /api/invoices
- *      no filtran por pertenencia — deben rechazar a un tutor por completo
- *      (que solo tiene el permiso ":own"), no solo a roles sin ningún permiso.
+ * Contexto histórico: varios de estos IDOR los explotaba el rol 'tutor'
+ * (portal self-service). Ese portal y ese rol fueron retirados — ahora toda
+ * cuenta autenticada es staff. Los tests se conservan porque el invariante
+ * sigue vigente: un rol SIN el permiso correspondiente (aquí uno no
+ * reconocido) debe recibir 403 antes de tocar la base de datos.
  *
- * Estos tests deben fallar si alguien vuelve a quitar el guard de permisos
- * o el filtro de pertenencia de estos endpoints.
+ * C1 — /api/appointments/:id: PUT/DELETE exigen 'appointments:write'.
+ * C2 — /api/invoices/payment: POST exige rol con permiso de pagos.
+ * Regresión guard.ts: GET /api/patients y GET /api/invoices no filtran por
+ *      pertenencia — deben rechazar por completo a un rol sin el permiso
+ *      directo, no solo a roles sin ningún permiso.
+ * POST /api/owners: exige 'owners:write'.
+ *
+ * Estos tests deben fallar si alguien quita el guard de permisos de estos
+ * endpoints.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -31,14 +32,9 @@ function makeChain(resolvedValue: any[]) {
 vi.mock('../../../db', () => ({ db: { select: vi.fn() } }));
 vi.mock('../../../lib/auth', () => ({ auth: {} }));
 
-const canTutorAccessPatientMock = vi.hoisted(() => vi.fn());
-vi.mock('../../../lib/ownership', () => ({ canTutorAccessPatient: canTutorAccessPatientMock }));
-
 import { db } from '../../../db';
 import { PUT as apptPUT, DELETE as apptDELETE, GET as apptDetailGET } from '../appointments/[id]';
 import { POST as paymentPOST } from '../invoices/payment';
-import { GET as vaccinesGET } from '../medical/vaccines';
-import { GET as coOwnersGET } from '../patients/[id]/co-owners';
 import { GET as patientsGET } from '../patients/index';
 import { GET as invoicesGET } from '../invoices/index';
 import { POST as ownersPOST } from '../owners/index';
@@ -57,31 +53,29 @@ function jsonRequest(method: string, body: unknown) {
   });
 }
 
-const tutorUser = { id: 'tutor-1', role: 'tutor' };
-const otroTutorOwnerId = 99;
-const esteTutorOwnerId = 1;
+// Rol no reconocido: no aparece en la tabla de permisos → hasPermission = false.
+const outsiderUser = { id: 'outsider-1', role: 'desconocido' };
 
 beforeEach(() => {
   vi.mocked(db.select).mockReset();
-  canTutorAccessPatientMock.mockReset();
 });
 
-describe('C1 — IDOR en /api/appointments/:id', () => {
-  it('PUT → 403 para tutor (antes: cualquier tutor podía reasignar/mover cualquier cita)', async () => {
+describe('C1 — RBAC en /api/appointments/:id', () => {
+  it('PUT → 403 para un rol sin permiso (antes: cualquier tutor podía reasignar/mover cualquier cita)', async () => {
     const res = await apptPUT({
       params: { id: '1' },
       request: jsonRequest('PUT', { status: 'cancelada', veterinarianId: 'attacker-controlled' }),
-      locals: { user: tutorUser, session: {} },
+      locals: { user: outsiderUser, session: {} },
       url: new URL('http://localhost/api/test'),
     } as any);
     expect(res.status).toBe(403);
     expect(db.select).not.toHaveBeenCalled();
   });
 
-  it('DELETE → 403 para tutor (antes: cualquier tutor podía cancelar cualquier cita)', async () => {
+  it('DELETE → 403 para un rol sin permiso (antes: cualquier tutor podía cancelar cualquier cita)', async () => {
     const res = await apptDELETE({
       params: { id: '1' },
-      locals: { user: tutorUser, session: {} },
+      locals: { user: outsiderUser, session: {} },
       url: new URL('http://localhost/api/test'),
     } as any);
     expect(res.status).toBe(403);
@@ -104,34 +98,8 @@ describe('C1 — IDOR en /api/appointments/:id', () => {
     }
   });
 
-  it('GET → 404 cuando la cita pertenece a OTRO tutor (fuga de datos evitada)', async () => {
-    queueSelectResults(
-      [{ id: 1, ownerId: otroTutorOwnerId }], // fetch de la cita
-      [{ id: esteTutorOwnerId }],             // ficha de tutor del usuario logueado
-    );
-    const res = await apptDetailGET({
-      params: { id: '1' },
-      locals: { user: tutorUser, session: {} },
-      url: new URL('http://localhost/api/test'),
-    } as any);
-    expect(res.status).toBe(404);
-  });
-
-  it('GET → 200 cuando la cita SÍ pertenece al tutor', async () => {
-    queueSelectResults(
-      [{ id: 1, ownerId: esteTutorOwnerId }],
-      [{ id: esteTutorOwnerId }],
-    );
-    const res = await apptDetailGET({
-      params: { id: '1' },
-      locals: { user: tutorUser, session: {} },
-      url: new URL('http://localhost/api/test'),
-    } as any);
-    expect(res.status).toBe(200);
-  });
-
-  it('GET → 200 para staff sin restricción de pertenencia', async () => {
-    queueSelectResults([{ id: 1, ownerId: otroTutorOwnerId }]);
+  it('GET → 200 para staff', async () => {
+    queueSelectResults([{ id: 1, ownerId: 99 }]);
     const res = await apptDetailGET({
       params: { id: '1' },
       locals: { user: { id: 'staff-1', role: 'veterinario' }, session: {} },
@@ -142,10 +110,10 @@ describe('C1 — IDOR en /api/appointments/:id', () => {
 });
 
 describe('C2 — RBAC en /api/invoices/payment', () => {
-  it('403 para tutor (antes: cualquier tutor podía marcar cualquier factura como pagada)', async () => {
+  it('403 para un rol sin permiso (antes: cualquier tutor podía marcar cualquier factura como pagada)', async () => {
     const res = await paymentPOST({
       request: jsonRequest('POST', { invoiceId: 1, amount: 1000, method: 'efectivo' }),
-      locals: { user: tutorUser, session: {} },
+      locals: { user: outsiderUser, session: {} },
       url: new URL('http://localhost/api/test'),
     } as any);
     expect(res.status).toBe(403);
@@ -173,77 +141,21 @@ describe('C2 — RBAC en /api/invoices/payment', () => {
   });
 });
 
-describe('IDOR — GET /api/vaccines', () => {
-  it('403 para tutor cuando la mascota no es suya', async () => {
-    canTutorAccessPatientMock.mockResolvedValue(false);
-    const res = await vaccinesGET({
-      request: new Request('http://localhost/api/test?patientId=42'),
-      locals: { user: tutorUser, session: {} },
-      url: new URL('http://localhost/api/test?patientId=42'),
-    } as any);
-    expect(res.status).toBe(403);
-    expect(canTutorAccessPatientMock).toHaveBeenCalledWith('tutor-1', 42);
-  });
-
-  it('200 para tutor cuando la mascota SÍ es suya (dueño o co-tutor)', async () => {
-    canTutorAccessPatientMock.mockResolvedValue(true);
-    queueSelectResults([]);
-    const res = await vaccinesGET({
-      request: new Request('http://localhost/api/test?patientId=42'),
-      locals: { user: tutorUser, session: {} },
-      url: new URL('http://localhost/api/test?patientId=42'),
-    } as any);
-    expect(res.status).toBe(200);
-  });
-
-  it('200 para staff sin chequeo de pertenencia', async () => {
-    queueSelectResults([]);
-    const res = await vaccinesGET({
-      request: new Request('http://localhost/api/test?patientId=42'),
-      locals: { user: { id: 'staff-1', role: 'veterinario' }, session: {} },
-      url: new URL('http://localhost/api/test?patientId=42'),
-    } as any);
-    expect(res.status).toBe(200);
-    expect(canTutorAccessPatientMock).not.toHaveBeenCalled();
-  });
-});
-
-describe('IDOR — GET /api/patients/:id/co-owners', () => {
-  it('403 para tutor cuando la mascota no es suya', async () => {
-    canTutorAccessPatientMock.mockResolvedValue(false);
-    const res = await coOwnersGET({
-      params: { id: '42' },
-      locals: { user: tutorUser, session: {} },
-    } as any);
-    expect(res.status).toBe(403);
-  });
-
-  it('200 para tutor cuando la mascota SÍ es suya', async () => {
-    canTutorAccessPatientMock.mockResolvedValue(true);
-    queueSelectResults([]);
-    const res = await coOwnersGET({
-      params: { id: '42' },
-      locals: { user: tutorUser, session: {} },
-    } as any);
-    expect(res.status).toBe(200);
-  });
-});
-
-describe('Regresión — listados sin filtro de pertenencia no deben aceptar tutor', () => {
-  it('GET /api/patients → 403 para tutor (solo tiene "patients:read:own")', async () => {
+describe('Regresión — listados sin filtro de pertenencia no aceptan un rol sin permiso directo', () => {
+  it('GET /api/patients → 403 para un rol sin permiso', async () => {
     const res = await patientsGET({
       request: new Request('http://localhost/api/test'),
-      locals: { user: tutorUser, session: {} },
+      locals: { user: outsiderUser, session: {} },
       url: new URL('http://localhost/api/test'),
     } as any);
     expect(res.status).toBe(403);
     expect(db.select).not.toHaveBeenCalled();
   });
 
-  it('GET /api/invoices → 403 para tutor (solo tiene "invoices:read:own")', async () => {
+  it('GET /api/invoices → 403 para un rol sin permiso', async () => {
     const res = await invoicesGET({
       request: new Request('http://localhost/api/test'),
-      locals: { user: tutorUser, session: {} },
+      locals: { user: outsiderUser, session: {} },
       url: new URL('http://localhost/api/test'),
     } as any);
     expect(res.status).toBe(403);
@@ -251,11 +163,11 @@ describe('Regresión — listados sin filtro de pertenencia no deben aceptar tut
   });
 });
 
-describe('POST /api/owners — antes sin ningún chequeo de rol', () => {
-  it('403 para tutor (antes: cualquier usuario autenticado podía crear fichas de tutor)', async () => {
+describe('POST /api/owners — exige owners:write', () => {
+  it('403 para un rol sin permiso (antes: cualquier usuario autenticado podía crear fichas)', async () => {
     const res = await ownersPOST({
       request: jsonRequest('POST', { firstName: 'X', lastName: 'Y', email: 'x@y.com' }),
-      locals: { user: tutorUser, session: {} },
+      locals: { user: outsiderUser, session: {} },
       url: new URL('http://localhost/api/test'),
     } as any);
     expect(res.status).toBe(403);

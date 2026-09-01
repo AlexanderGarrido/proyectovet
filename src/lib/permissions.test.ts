@@ -59,47 +59,21 @@ describe('hasPermission', () => {
     });
   });
 
-  describe('tutor', () => {
-    it('puede leer sus propios pacientes (:own)', () => {
-      // hasPermission matches :own as a variant
-      expect(hasPermission('tutor', 'patients', 'read')).toBe(true);
-    });
-
-    it('puede crear citas', () => {
-      expect(hasPermission('tutor', 'appointments', 'create')).toBe(true);
-    });
-
-    it('NO puede acceder a datos generales de pacientes (write)', () => {
-      expect(hasPermission('tutor', 'patients', 'write')).toBe(false);
-    });
-
-    it('NO puede acceder a registros médicos de otros', () => {
-      expect(hasPermission('tutor', 'medical-records', 'read')).toBe(false);
-    });
-
-    it('NO puede gestionar inventario', () => {
-      expect(hasPermission('tutor', 'inventory', 'read')).toBe(false);
-      expect(hasPermission('tutor', 'inventory', 'write')).toBe(false);
-    });
-
-    it('NO puede gestionar usuarios', () => {
-      expect(hasPermission('tutor', 'users', 'read')).toBe(false);
+  describe('rol desconocido / retirado', () => {
+    it('niega todo para un rol que no existe en la tabla de permisos', () => {
+      // 'tutor' fue retirado del producto; cualquier rol no reconocido cae aquí.
+      expect(hasPermission('tutor' as any, 'patients', 'read')).toBe(false);
+      expect(hasPermission('tutor' as any, 'appointments', 'create')).toBe(false);
+      expect(hasPermission('desconocido' as any, 'dashboard', 'read')).toBe(false);
     });
   });
 });
 
 // ── requiresOwnershipCheck ────────────────────────────────────────────────────
 describe('requiresOwnershipCheck', () => {
-  it('tutor → true para patients:read (tiene :own)', () => {
-    expect(requiresOwnershipCheck('tutor', 'patients', 'read')).toBe(true);
-  });
-
-  it('tutor → true para appointments:read (tiene :own)', () => {
-    expect(requiresOwnershipCheck('tutor', 'appointments', 'read')).toBe(true);
-  });
-
-  it('tutor → true para prescriptions:read (tiene :own)', () => {
-    expect(requiresOwnershipCheck('tutor', 'prescriptions', 'read')).toBe(true);
+  it('ningún rol de staff usa la variante :own (todo el acceso es directo)', () => {
+    expect(requiresOwnershipCheck('veterinario', 'patients', 'read')).toBe(false);
+    expect(requiresOwnershipCheck('recepcionista', 'appointments', 'read')).toBe(false);
   });
 
   it('admin → false (acceso total, sin ownership check)', () => {

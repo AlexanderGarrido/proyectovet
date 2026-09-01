@@ -55,7 +55,7 @@ function ctx(user: unknown, params: Record<string, string> = { id: '1' }, body?:
   } as any;
 }
 
-const tutorUser = { id: 'tutor-1', role: 'tutor' };
+const outsiderUser = { id: 'outsider-1', role: 'desconocido' };
 const vetUser = { id: 'vet-1', role: 'veterinario' };
 const recepUser = { id: 'recep-1', role: 'recepcionista' };
 
@@ -63,66 +63,66 @@ beforeEach(() => {
   vi.mocked(db.select).mockReset();
 });
 
-describe('IDOR ronda 3 — endpoints de detalle bloqueados para tutor', () => {
-  it('GET /api/patients/:id → 403 para tutor', async () => {
-    const res = await patientDetailGET(ctx(tutorUser));
+describe('IDOR ronda 3 — endpoints de detalle bloqueados para un rol sin permiso', () => {
+  it('GET /api/patients/:id → 403 para un rol sin permiso', async () => {
+    const res = await patientDetailGET(ctx(outsiderUser));
     expect(res.status).toBe(403);
     expect(db.select).not.toHaveBeenCalled();
   });
 
-  it('PUT /api/patients/:id → 403 para tutor', async () => {
-    const res = await patientDetailPUT(ctx(tutorUser, { id: '1' }, { name: 'hackeado' }));
+  it('PUT /api/patients/:id → 403 para un rol sin permiso', async () => {
+    const res = await patientDetailPUT(ctx(outsiderUser, { id: '1' }, { name: 'hackeado' }));
     expect(res.status).toBe(403);
   });
 
-  it('GET /api/owners/:id → 403 para tutor', async () => {
-    const res = await ownerDetailGET(ctx(tutorUser));
-    expect(res.status).toBe(403);
-    expect(db.select).not.toHaveBeenCalled();
-  });
-
-  it('PUT /api/owners/:id → 403 para tutor', async () => {
-    const res = await ownerDetailPUT(ctx(tutorUser, { id: '1' }, { firstName: 'hackeado' }));
-    expect(res.status).toBe(403);
-  });
-
-  it('GET /api/invoices/:id → 403 para tutor (antes: podía leer cualquier factura ajena)', async () => {
-    const res = await invoiceDetailGET(ctx(tutorUser));
+  it('GET /api/owners/:id → 403 para un rol sin permiso', async () => {
+    const res = await ownerDetailGET(ctx(outsiderUser));
     expect(res.status).toBe(403);
     expect(db.select).not.toHaveBeenCalled();
   });
 
-  it('PUT /api/invoices/:id → 403 para tutor (antes: podía marcar cualquier factura como pagada/anulada)', async () => {
-    const res = await invoiceDetailPUT(ctx(tutorUser, { id: '1' }, { status: 'pagada' }));
+  it('PUT /api/owners/:id → 403 para un rol sin permiso', async () => {
+    const res = await ownerDetailPUT(ctx(outsiderUser, { id: '1' }, { firstName: 'hackeado' }));
+    expect(res.status).toBe(403);
+  });
+
+  it('GET /api/invoices/:id → 403 para un rol sin permiso (antes: podía leer cualquier factura ajena)', async () => {
+    const res = await invoiceDetailGET(ctx(outsiderUser));
     expect(res.status).toBe(403);
     expect(db.select).not.toHaveBeenCalled();
   });
 
-  it('PUT /api/lab-orders/:id → 403 para tutor (antes: podía alterar resultados de laboratorio ajenos)', async () => {
-    const res = await labOrderDetailPUT(ctx(tutorUser, { id: '1' }, { status: 'completado', results: 'alterado' }));
+  it('PUT /api/invoices/:id → 403 para un rol sin permiso (antes: podía marcar cualquier factura como pagada/anulada)', async () => {
+    const res = await invoiceDetailPUT(ctx(outsiderUser, { id: '1' }, { status: 'pagada' }));
     expect(res.status).toBe(403);
     expect(db.select).not.toHaveBeenCalled();
   });
 
-  it('GET /api/prescriptions/:id → 403 para tutor', async () => {
-    const res = await prescriptionDetailGET(ctx(tutorUser));
+  it('PUT /api/lab-orders/:id → 403 para un rol sin permiso (antes: podía alterar resultados de laboratorio ajenos)', async () => {
+    const res = await labOrderDetailPUT(ctx(outsiderUser, { id: '1' }, { status: 'completado', results: 'alterado' }));
     expect(res.status).toBe(403);
     expect(db.select).not.toHaveBeenCalled();
   });
 
-  it('PUT /api/prescriptions/:id → 403 para tutor', async () => {
-    const res = await prescriptionDetailPUT(ctx(tutorUser, { id: '1' }, { status: 'cancelada' }));
-    expect(res.status).toBe(403);
-  });
-
-  it('GET /api/medical/:id → 403 para tutor (antes: historial clínico completo de cualquier paciente)', async () => {
-    const res = await medicalDetailGET(ctx(tutorUser));
+  it('GET /api/prescriptions/:id → 403 para un rol sin permiso', async () => {
+    const res = await prescriptionDetailGET(ctx(outsiderUser));
     expect(res.status).toBe(403);
     expect(db.select).not.toHaveBeenCalled();
   });
 
-  it('GET /api/vaccines/upcoming → 403 para tutor (antes: listado masivo de PII de todos los tutores)', async () => {
-    const res = await vaccinesUpcomingGET(ctx(tutorUser));
+  it('PUT /api/prescriptions/:id → 403 para un rol sin permiso', async () => {
+    const res = await prescriptionDetailPUT(ctx(outsiderUser, { id: '1' }, { status: 'cancelada' }));
+    expect(res.status).toBe(403);
+  });
+
+  it('GET /api/medical/:id → 403 para un rol sin permiso (antes: historial clínico completo de cualquier paciente)', async () => {
+    const res = await medicalDetailGET(ctx(outsiderUser));
+    expect(res.status).toBe(403);
+    expect(db.select).not.toHaveBeenCalled();
+  });
+
+  it('GET /api/vaccines/upcoming → 403 para un rol sin permiso (antes: listado masivo de PII de todos los tutores)', async () => {
+    const res = await vaccinesUpcomingGET(ctx(outsiderUser));
     expect(res.status).toBe(403);
     expect(db.select).not.toHaveBeenCalled();
   });
@@ -133,26 +133,26 @@ describe('IDOR ronda 3 — endpoints de detalle bloqueados para tutor', () => {
     expect(res.status).not.toBe(403);
   });
 
-  it('GET /api/schedules → 403 para tutor', async () => {
-    const res = await schedulesGET(ctx(tutorUser));
+  it('GET /api/schedules → 403 para un rol sin permiso', async () => {
+    const res = await schedulesGET(ctx(outsiderUser));
     expect(res.status).toBe(403);
     expect(db.select).not.toHaveBeenCalled();
   });
 
-  it('GET /api/invoices/:id/pdf → 403 para tutor (antes: podía descargar el PDF de cualquier factura ajena)', async () => {
-    const res = await invoicePdfGET(ctx(tutorUser));
+  it('GET /api/invoices/:id/pdf → 403 para un rol sin permiso (antes: podía descargar el PDF de cualquier factura ajena)', async () => {
+    const res = await invoicePdfGET(ctx(outsiderUser));
     expect(res.status).toBe(403);
     expect(db.select).not.toHaveBeenCalled();
   });
 
-  it('GET /api/lab-orders/:id/pdf → 403 para tutor', async () => {
-    const res = await labOrderPdfGET(ctx(tutorUser));
+  it('GET /api/lab-orders/:id/pdf → 403 para un rol sin permiso', async () => {
+    const res = await labOrderPdfGET(ctx(outsiderUser));
     expect(res.status).toBe(403);
     expect(db.select).not.toHaveBeenCalled();
   });
 
-  it('GET /api/prescriptions/:id/pdf → 403 para tutor', async () => {
-    const res = await prescriptionPdfGET(ctx(tutorUser));
+  it('GET /api/prescriptions/:id/pdf → 403 para un rol sin permiso', async () => {
+    const res = await prescriptionPdfGET(ctx(outsiderUser));
     expect(res.status).toBe(403);
     expect(db.select).not.toHaveBeenCalled();
   });

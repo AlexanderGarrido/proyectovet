@@ -1,6 +1,5 @@
 ---
 import DashboardLayout from '../../layouts/DashboardLayout.astro';
-import { OwnerInviteButton } from '../../components/patients/OwnerInviteButton';
 import { db } from '../../db';
 import { owners, patients } from '../../db/schema/patients';
 import { invoices } from '../../db/schema/billing';
@@ -62,21 +61,6 @@ const canEdit = user.role === 'admin' || user.role === 'recepcionista';
           </div>
         )}
       </div>
-
-      <!-- Cuenta del portal -->
-      {canEdit && (
-        <div class="rounded-xl border bg-card p-6">
-          <h3 class="font-semibold mb-3">Acceso al portal</h3>
-          {owner.userId ? (
-            <p class="text-sm text-success flex items-center gap-1.5">✓ Cuenta vinculada — puede iniciar sesión y ver sus mascotas.</p>
-          ) : (
-            <>
-              <p class="text-sm text-muted-foreground mb-3">Este tutor aún no tiene cuenta. Genera un link de invitación y compártelo por WhatsApp para que active su portal.</p>
-              <OwnerInviteButton client:visible ownerId={id} ownerName={owner.firstName} ownerPhone={owner.phone} />
-            </>
-          )}
-        </div>
-      )}
     </div>
 
     <!-- Mascotas y facturación -->

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Pencil, Trash2, Check, X, UserCheck, UserX } from 'lucide-react';
 import { toast } from 'sonner';
+import { NewUserDialog } from './NewUserDialog';
 
 interface User { id: string; name: string; email: string; role: string; isActive: boolean; }
 
@@ -104,7 +105,11 @@ export function UserList({ currentUserId }: { currentUserId: string }) {
   );
 
   return (
-    <div className="rounded-xl border overflow-hidden">
+    <div className="space-y-3">
+      <div className="flex justify-end">
+        <NewUserDialog onCreated={fetchUsers} />
+      </div>
+      <div className="rounded-xl border overflow-hidden">
       <table className="w-full text-sm">
         <thead className="bg-muted/50">
           <tr>
@@ -204,6 +209,7 @@ export function UserList({ currentUserId }: { currentUserId: string }) {
           })}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

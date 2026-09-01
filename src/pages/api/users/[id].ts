@@ -2,24 +2,15 @@ import type { APIRoute } from 'astro';
 import { db } from '../../../db';
 import { users, accounts, sessions } from '../../../db/schema/users';
 import { eq } from 'drizzle-orm';
-import * as crypto from 'crypto';
-import { scryptAsync } from '@noble/hashes/scrypt.js';
 import { userUpdateSchema, zodError, parseJsonBody } from '../../../lib/schemas';
 import { jsonError, jsonOk } from '../../../lib/http';
 import { logAudit } from '../../../lib/audit';
+import { hashPassword } from '../../../lib/password';
 
 /** ¿El error es una violación de clave foránea de Postgres? */
 function isForeignKeyError(err: unknown): boolean {
   const e = err as { code?: string; cause?: { code?: string } };
   return e?.code === '23503' || e?.cause?.code === '23503';
-}
-
-async function hashPassword(password: string): Promise<string> {
-  const saltBytes = new Uint8Array(16);
-  crypto.getRandomValues(saltBytes);
-  const salt = Buffer.from(saltBytes).toString('hex');
-  const key = await scryptAsync(password.normalize('NFKC'), salt, { N: 16384, r: 16, p: 1, dkLen: 64 });
-  return `${salt}:${Buffer.from(key).toString('hex')}`;
 }
 
 export const PUT: APIRoute = async ({ params, request, locals }) => {

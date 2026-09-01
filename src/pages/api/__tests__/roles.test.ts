@@ -11,7 +11,7 @@ vi.mock('../../../lib/auth', () => ({ auth: {} }));
 import { GET as ownersGET } from '../owners/index';
 import { GET as patientsGET } from '../patients/index';
 import { GET as invoicesGET } from '../invoices/index';
-import { GET as usersGET } from '../users/index';
+import { GET as usersGET, POST as usersPOST } from '../users/index';
 
 const outsiderUser = {
   id: 'user-1',
@@ -63,5 +63,33 @@ describe('Seguridad — 403 para un rol sin permiso en endpoints de staff', () =
     const recepcionista = { ...outsiderUser, role: 'recepcionista' };
     const res = await usersGET(makeContext(recepcionista));
     expect(res.status).toBe(403);
+  });
+});
+
+describe('POST /api/users — alta interna solo-admin', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  function jsonCtx(user: unknown, body: unknown) {
+    return {
+      request: new Request('http://localhost/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }),
+      locals: { user, session: {} },
+      url: new URL('http://localhost/api/users'),
+    } as any;
+  }
+
+  const validBody = { name: 'Nueva Vet', email: 'nueva@clinica.cl', password: 'Segura123', role: 'veterinario' };
+
+  it('403 para un rol no-admin', async () => {
+    const res = await usersPOST(jsonCtx({ ...outsiderUser, role: 'veterinario' }, validBody));
+    expect(res.status).toBe(403);
+  });
+
+  it('401 sin sesión', async () => {
+    const res = await usersPOST(jsonCtx(undefined, validBody));
+    expect(res.status).toBe(401);
   });
 });

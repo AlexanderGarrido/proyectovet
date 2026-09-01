@@ -281,6 +281,18 @@ export const userUpdateSchema = z.object({
 });
 export type UserUpdateInput = z.infer<typeof userUpdateSchema>;
 
+// Alta de un usuario del staff desde el panel de admin (reemplaza el registro
+// público self-service, ya retirado). El rol se fija explícitamente aquí — no
+// hay 'tutor'.
+export const userCreateSchema = z.object({
+  name:     z.string().min(1, 'El nombre es requerido').max(200),
+  email:    z.string().email('Correo inválido').max(200),
+  password: z.string().min(8, 'Mínimo 8 caracteres').max(100),
+  role:     z.enum(['admin', 'veterinario', 'recepcionista']),
+  phone:    z.string().max(30).optional().or(z.literal('')),
+});
+export type UserCreateInput = z.infer<typeof userCreateSchema>;
+
 // ── Medical Record Create (POST) ─────────────────────────────────────────────
 export const medicalRecordCreateSchema = z.object({
   patientId: z.coerce.number().int().positive(),

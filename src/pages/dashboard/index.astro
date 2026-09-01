@@ -5,8 +5,6 @@ import { VaccineReminders } from '../../components/dashboard/VaccineReminders';
 import { NextAppointment } from '../../components/dashboard/NextAppointment';
 import { ExpiringProducts } from '../../components/dashboard/ExpiringProducts';
 import { PendingInvoices } from '../../components/dashboard/PendingInvoices';
-import { ClientPortal } from '../../components/dashboard/ClientPortal';
-import { getPortalData } from '../../lib/portalData';
 import { PawPrint, Calendar, Package, Receipt } from 'lucide-react';
 import { db } from '../../db';
 import { patients, owners } from '../../db/schema/patients';
@@ -23,62 +21,42 @@ const roleGreeting: Record<string, string> = {
   admin: 'Panel de Administración',
   veterinario: 'Panel del Veterinario',
   recepcionista: 'Panel de Recepción',
-  tutor: 'Mi Portal',
 };
 
-const isTutor = user.role === 'tutor';
+const today = new Date(); today.setHours(0, 0, 0, 0);
+const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
+const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
 
-// Se consulta en el servidor (en vez de que ClientPortal lo pida por fetch
-// tras hidratarse) para no pagar un round-trip cliente→servidor extra en la
-// primera carga del portal — la página llega con los datos ya adentro.
-// JSON.parse(JSON.stringify(...)) fuerza la misma serialización (fechas →
-// string) que ocurre al pasar props a un componente cliente, para que el
-// tipo coincida con lo que ClientPortal espera (igual que fetch().json()).
-const portalData = isTutor ? JSON.parse(JSON.stringify(await getPortalData(user.id))) : null;
+// Las 5 consultas son independientes → se ejecutan en paralelo para reducir latencia.
+const [patientRes, apptRes, productRes, revenueRes, routeRes] = await Promise.all([
+  db.select({ count: count() }).from(patients).where(eq(patients.isActive, true)),
+  db.select({ count: count() }).from(appointments)
+    .where(and(gte(appointments.scheduledAt, today), lt(appointments.scheduledAt, tomorrow))),
+  db.select({ count: count() }).from(products).where(eq(products.isActive, true)),
+  db.select({ total: sum(invoices.total) }).from(invoices)
+    .where(and(gte(invoices.date, firstOfMonth), eq(invoices.status, 'pagada'))),
+  db.select({
+    id: appointments.id,
+    scheduledAt: appointments.scheduledAt,
+    type: appointments.type,
+    status: appointments.status,
+    visitAddress: appointments.visitAddress,
+    patientName: patients.name,
+    ownerFirstName: owners.firstName,
+    ownerLastName: owners.lastName,
+  }).from(appointments)
+    .leftJoin(patients, eq(appointments.patientId, patients.id))
+    .leftJoin(owners, eq(appointments.ownerId, owners.id))
+    .where(and(gte(appointments.scheduledAt, today), lt(appointments.scheduledAt, tomorrow)))
+    .orderBy(appointments.scheduledAt),
+]);
 
-// Only load staff stats for non-client roles
-let patientCount = { count: 0 };
-let todayAppts = { count: 0 };
-let productCount = { count: 0 };
-let revenue = 0;
-let todayRoute: { id: number; scheduledAt: Date; type: string; status: string; visitAddress: string | null; patientName: string | null; ownerFirstName: string | null; ownerLastName: string | null; }[] = [];
-
-if (!isTutor) {
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
-  const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-
-  // Las 5 consultas son independientes → se ejecutan en paralelo para reducir latencia.
-  const [patientRes, apptRes, productRes, revenueRes, routeRes] = await Promise.all([
-    db.select({ count: count() }).from(patients).where(eq(patients.isActive, true)),
-    db.select({ count: count() }).from(appointments)
-      .where(and(gte(appointments.scheduledAt, today), lt(appointments.scheduledAt, tomorrow))),
-    db.select({ count: count() }).from(products).where(eq(products.isActive, true)),
-    db.select({ total: sum(invoices.total) }).from(invoices)
-      .where(and(gte(invoices.date, firstOfMonth), eq(invoices.status, 'pagada'))),
-    db.select({
-      id: appointments.id,
-      scheduledAt: appointments.scheduledAt,
-      type: appointments.type,
-      status: appointments.status,
-      visitAddress: appointments.visitAddress,
-      patientName: patients.name,
-      ownerFirstName: owners.firstName,
-      ownerLastName: owners.lastName,
-    }).from(appointments)
-      .leftJoin(patients, eq(appointments.patientId, patients.id))
-      .leftJoin(owners, eq(appointments.ownerId, owners.id))
-      .where(and(gte(appointments.scheduledAt, today), lt(appointments.scheduledAt, tomorrow)))
-      .orderBy(appointments.scheduledAt),
-  ]);
-
-  [patientCount] = patientRes;
-  [todayAppts] = apptRes;
-  [productCount] = productRes;
-  todayRoute = routeRes;
-  const monthRevenue = revenueRes[0];
-  revenue = monthRevenue.total ? parseFloat(String(monthRevenue.total)) : 0;
-}
+const [patientCount] = patientRes;
+const [todayAppts] = apptRes;
+const [productCount] = productRes;
+const todayRoute = routeRes;
+const monthRevenue = revenueRes[0];
+const revenue = monthRevenue.total ? parseFloat(String(monthRevenue.total)) : 0;
 
 const typeLabels: Record<string, string> = {
   consulta: 'Consulta', vacunacion: 'Vacunación', cirugia: 'Cirugía',
@@ -99,17 +77,13 @@ const statusColors: Record<string, string> = {
         <div class="text-center sm:text-left sm:border-l border-border sm:pl-5">
           <h2 class="text-xl font-semibold">Bienvenido, {user.name}</h2>
           <p class="text-muted-foreground text-sm mt-1">
-            {isTutor ? 'Aquí puedes ver tus mascotas, citas, recetas y órdenes de exámenes.' : 'Aquí tienes un resumen de hoy.'}
+            Aquí tienes un resumen de hoy.
           </p>
         </div>
       </div>
     </div>
 
-    {isTutor ? (
-      <ClientPortal client:load initialData={portalData} />
-    ) : (
-      <>
-        <div class="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+    <div class="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard title="Pacientes" value={String(patientCount.count)}
             description="Registrados en el sistema" icon={PawPrint} href="/pacientes" />
           <StatCard title="Citas Hoy" value={String(todayAppts.count)}
@@ -219,7 +193,5 @@ const statusColors: Record<string, string> = {
             </div>
           )}
         </div>
-      </>
-    )}
   </div>
 </DashboardLayout>

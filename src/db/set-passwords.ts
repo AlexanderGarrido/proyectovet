@@ -34,8 +34,6 @@ const SEED_EMAILS = [
   'veterinario@vetclinic.com',
   'vet2@vetclinic.com',
   'recepcion@vetclinic.com',
-  'cliente@vetclinic.com',
-  'cliente2@vetclinic.com',
 ];
 
 // Contraseña por defecto para todos los usuarios del seed

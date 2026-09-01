@@ -53,22 +53,19 @@ async function seed() {
   const vetId   = crypto.randomUUID();
   const vet2Id  = crypto.randomUUID();
   const recepId = crypto.randomUUID();
-  const client1Id = crypto.randomUUID();
-  const client2Id = crypto.randomUUID();
 
   await db.insert(users).values([
     { id: adminId,   name: 'Admin Sistema',       email: 'admin@vetclinic.com',       emailVerified: true, role: 'admin',         phone: '+506 2222-2222' },
     { id: vetId,     name: 'Dr. Carlos Ramirez',  email: 'veterinario@vetclinic.com', emailVerified: true, role: 'veterinario',   phone: '+506 8888-1111' },
     { id: vet2Id,    name: 'Dra. Sofia Mora',     email: 'vet2@vetclinic.com',        emailVerified: true, role: 'veterinario',   phone: '+506 8888-4444' },
     { id: recepId,   name: 'Maria Lopez',         email: 'recepcion@vetclinic.com',   emailVerified: true, role: 'recepcionista', phone: '+506 8888-2222' },
-    { id: client1Id, name: 'Juan Perez',          email: 'cliente@vetclinic.com',     emailVerified: true, role: 'tutor',         phone: '+506 8888-3333' },
-    { id: client2Id, name: 'Ana Martinez',        email: 'cliente2@vetclinic.com',    emailVerified: true, role: 'tutor',         phone: '+506 7777-4444' },
   ]);
   console.log('✅ Users created.');
 
   // ── OWNERS ────────────────────────────────────────────────────────────────
-  const [o1] = await db.insert(owners).values({ userId: client1Id, firstName: 'Juan',    lastName: 'Perez',    email: 'cliente@vetclinic.com',  phone: '+506 8888-3333', address: 'San José, Costa Rica',   documentId: '1-1234-5678' }).returning();
-  const [o2] = await db.insert(owners).values({ userId: client2Id, firstName: 'Ana',     lastName: 'Martinez', email: 'cliente2@vetclinic.com', phone: '+506 7777-4444', address: 'Heredia, Costa Rica',    documentId: '2-2345-6789' }).returning();
+  // Los tutores son fichas de cliente sin cuenta de acceso (el portal se retiró).
+  const [o1] = await db.insert(owners).values({ firstName: 'Juan',    lastName: 'Perez',    email: 'cliente@vetclinic.com',  phone: '+506 8888-3333', address: 'San José, Costa Rica',   documentId: '1-1234-5678' }).returning();
+  const [o2] = await db.insert(owners).values({ firstName: 'Ana',     lastName: 'Martinez', email: 'cliente2@vetclinic.com', phone: '+506 7777-4444', address: 'Heredia, Costa Rica',    documentId: '2-2345-6789' }).returning();
   const [o3] = await db.insert(owners).values({                    firstName: 'Roberto', lastName: 'Vargas',   email: 'roberto@email.com',     phone: '+506 6666-5555', address: 'Alajuela, Costa Rica',   documentId: '3-3456-7890' }).returning();
   const [o4] = await db.insert(owners).values({                    firstName: 'Carmen',  lastName: 'Salazar',  email: 'carmen@email.com',      phone: '+506 5555-6666', address: 'Cartago, Costa Rica',    documentId: '4-4567-8901' }).returning();
   const owner1Id = o1.id;

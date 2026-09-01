@@ -363,25 +363,6 @@ export const loginSchema = z.object({
 });
 export type LoginFormData = z.infer<typeof loginSchema>;
 
-// ── Portal del tutor (self-service) ────────────────────────────────────────────
-export const clientProfileSchema = z.object({
-  phone: z.string().max(20).optional().nullable(),
-  address: z.string().max(500).optional().nullable(),
-});
-export type ClientProfileInput = z.infer<typeof clientProfileSchema>;
-
-export const clientPetSchema = z.object({
-  name:        z.string().min(1, 'Nombre requerido').max(100),
-  species:     z.enum(['perro', 'gato', 'ave', 'conejo', 'reptil', 'roedor', 'otro']), // ya alineado con el enum de BD
-  sex:         z.enum(['macho', 'hembra', 'desconocido']).optional().nullable(),
-  breed:       z.string().max(100).optional().nullable(),
-  color:       z.string().max(50).optional().nullable(),
-  dateOfBirth: z.string().optional().nullable(),
-  weight:      z.coerce.number().positive().optional().nullable(),
-  notes:       z.string().max(2000).optional().nullable(),
-});
-export type ClientPetInput = z.infer<typeof clientPetSchema>;
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
 export async function parseJsonBody(request: Request): Promise<{ data: unknown } | { error: Response }> {
   try {

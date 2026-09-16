@@ -117,8 +117,8 @@ describe('appointmentSchema', () => {
     patientId: 1,
     ownerId: 1,
     veterinarianId: 'vet-1',
-    scheduledAt: '2026-03-15T10:00:00',
-    endAt: '2026-03-15T11:00:00',
+    scheduledAt: '2026-03-15T10:00:00Z',
+    endAt: '2026-03-15T11:00:00Z',
     type: 'consulta' as const,
   };
 
@@ -129,8 +129,8 @@ describe('appointmentSchema', () => {
   it('falla si endAt es anterior a scheduledAt', () => {
     const result = appointmentSchema.safeParse({
       ...base,
-      scheduledAt: '2026-03-15T11:00:00',
-      endAt: '2026-03-15T10:00:00',
+      scheduledAt: '2026-03-15T11:00:00Z',
+      endAt: '2026-03-15T10:00:00Z',
     });
     expect(result.success).toBe(false);
     expect(result.error?.issues[0].path).toContain('endAt');
@@ -139,8 +139,8 @@ describe('appointmentSchema', () => {
   it('falla si endAt es igual a scheduledAt', () => {
     const result = appointmentSchema.safeParse({
       ...base,
-      scheduledAt: '2026-03-15T10:00:00',
-      endAt: '2026-03-15T10:00:00',
+      scheduledAt: '2026-03-15T10:00:00Z',
+      endAt: '2026-03-15T10:00:00Z',
     });
     expect(result.success).toBe(false);
   });

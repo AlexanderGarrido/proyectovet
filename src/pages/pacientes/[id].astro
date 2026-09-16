@@ -1,4 +1,6 @@
 ---
+import { OwnerEditor } from '../../components/patients/OwnerEditor';
+import { hasPermission } from '../../lib/permissions';
 import DashboardLayout from '../../layouts/DashboardLayout.astro';
 import { PatientProfileTabs } from '../../components/patients/PatientProfileTabs';
 import { CoOwnersSection } from '../../components/patients/CoOwnersSection';
@@ -38,7 +40,7 @@ const [records, appts] = await Promise.all([
 ]);
 
 const canEdit = user.role === 'admin' || user.role === 'veterinario';
-const canManageOwners = user.role === 'admin' || user.role === 'recepcionista';
+const canManageOwners = hasPermission(user.role, 'owners', 'write');
 const speciesEmoji: Record<string, string> = { perro: '🐕', gato: '🐈', ave: '🐦', reptil: '🦎', roedor: '🐭', otro: '🐾' };
 ---
 
@@ -82,10 +84,11 @@ const speciesEmoji: Record<string, string> = { perro: '🐕', gato: '🐈', ave:
 
       <!-- Tutor -->
       <div class="rounded-xl border bg-card p-6">
-        <h3 class="font-semibold mb-3">Tutor</h3>
+        <h3 class="font-semibold mb-3">Responsable</h3>
         <a href={`/tutores/${patient.ownerId}`} class="font-medium text-primary hover:underline">{patient.ownerFirstName} {patient.ownerLastName}</a>
         {patient.ownerPhone && <p class="text-sm text-muted-foreground">{patient.ownerPhone}</p>}
         {patient.ownerEmail && <p class="text-sm text-muted-foreground">{patient.ownerEmail}</p>}
+        {canManageOwners && <OwnerEditor client:load ownerId={patient.ownerId} />}
       </div>
 
       <CoOwnersSection client:visible patientId={id} canEdit={canManageOwners} />
@@ -100,6 +103,11 @@ const speciesEmoji: Record<string, string> = { perro: '🐕', gato: '🐈', ave:
 
     <!-- Historial -->
     <div class="lg:col-span-2">
+      <nav class="flex flex-wrap gap-3 mb-4 text-sm" aria-label="Documentos del paciente">
+        {hasPermission(user.role, 'prescriptions', 'write') && <a class="border rounded-lg px-3 py-2" href={`/recetas/nueva?patientId=${id}`}>Nueva receta</a>}
+        {hasPermission(user.role, 'lab-orders', 'write') && <a class="border rounded-lg px-3 py-2" href={`/ordenes/nueva?patientId=${id}`}>Solicitar examen</a>}
+        {hasPermission(user.role, 'consents', 'write') && <a class="border rounded-lg px-3 py-2" href={`/consentimientos/nueva?patientId=${id}`}>Consentimiento</a>}
+      </nav>
       <PatientProfileTabs client:load patientId={id} canEdit={canEdit} records={records} appointments={appts} />
     </div>
   </div>

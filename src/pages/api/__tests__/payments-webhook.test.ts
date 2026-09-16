@@ -24,7 +24,7 @@ vi.mock('../../../lib/payments/mercadopago', () => ({
 
 function makeChain(resolvedValue: any[]) {
   const chain: any = {};
-  ['from', 'where'].forEach((m) => {
+  ['from', 'where', 'for'].forEach((m) => {
     chain[m] = vi.fn(() => chain);
   });
   chain.then = (resolve: any, reject: any) => Promise.resolve(resolvedValue).then(resolve, reject);
@@ -33,6 +33,7 @@ function makeChain(resolvedValue: any[]) {
 
 vi.mock('../../../db', () => ({
   db: {
+    transaction: vi.fn(async (callback) => callback(db)),
     select: vi.fn(),
     insert: vi.fn(() => ({ values: vi.fn().mockResolvedValue(undefined) })),
     update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn().mockResolvedValue(undefined) })) })),
@@ -99,6 +100,7 @@ describe('POST /api/payments/webhook', () => {
   it('idempotencia: si el pago ya fue procesado (mismo reference), no lo duplica', async () => {
     validateMock.mockReturnValue(undefined);
     paymentGetMock.mockResolvedValue({ status: 'approved', external_reference: 'invoice-1', transaction_amount: 100 });
+    vi.mocked(db.select).mockReturnValueOnce(makeChain([{ id: 1, status: 'pagada' }]) as any);
     vi.mocked(db.select).mockReturnValueOnce(makeChain([{ id: 1 }]) as any); // ya existe con ese reference
     const res = await webhookPOST(ctx(makeRequest({ type: 'payment', data: { id: '123' } })));
     const json = await res.json();
@@ -111,14 +113,17 @@ describe('POST /api/payments/webhook', () => {
     validateMock.mockReturnValue(undefined);
     paymentGetMock.mockResolvedValue({ status: 'approved', external_reference: 'invoice-1', transaction_amount: 100 });
     const select = vi.mocked(db.select);
+    const lockedInvoice = makeChain([{ id: 1, total: '100.00', status: 'emitida', createdBy: 'staff-1' }]);
+    select.mockReturnValueOnce(lockedInvoice as any);
     select.mockReturnValueOnce(makeChain([]) as any); // sin pago previo con ese reference
-    select.mockReturnValueOnce(makeChain([{ id: 1, total: '100.00', status: 'emitida', createdBy: 'staff-1' }]) as any); // factura
-    select.mockReturnValueOnce(makeChain([{ amount: '100.00' }]) as any); // pagos tras insertar
+    select.mockReturnValueOnce(makeChain([]) as any); // saldo leído bajo el bloqueo
 
     const res = await webhookPOST(ctx(makeRequest({ type: 'payment', data: { id: '123' } })));
     const json = await res.json();
     expect(res.status).toBe(200);
     expect(json.newStatus).toBe('pagada');
+    expect(lockedInvoice.for).toHaveBeenCalledWith('update');
+    expect(db.transaction).toHaveBeenCalledOnce();
     expect(db.insert).toHaveBeenCalled();
     expect(db.update).toHaveBeenCalled();
   });

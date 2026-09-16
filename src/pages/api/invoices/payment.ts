@@ -25,33 +25,35 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return jsonError(400, 'invoiceId: Se requiere un ID de factura válido');
   }
 
-  const [invoice] = await db.select().from(invoices).where(eq(invoices.id, invoiceId));
-  if (!invoice) return jsonError(404, 'Factura no encontrada');
-  if (invoice.status === 'pagada' || invoice.status === 'anulada') {
-    return jsonError(400, 'Esta factura ya no admite pagos');
-  }
+  return db.transaction(async (tx) => {
+    const [invoice] = await tx.select().from(invoices).where(eq(invoices.id, invoiceId)).for('update');
+    if (!invoice) return jsonError(404, 'Factura no encontrada');
+    if (invoice.status === 'pagada' || invoice.status === 'anulada') {
+      return jsonError(400, 'Esta factura ya no admite pagos');
+    }
 
-  const allPayments = await db.select().from(payments).where(eq(payments.invoiceId, invoiceId));
-  const alreadyPaidCents = allPayments.reduce((sum, p) => sum + toCents(p.amount), 0);
-  const totalCents = toCents(invoice.total);
-  const amountCents = toCents(amount);
-  if (alreadyPaidCents + amountCents > totalCents) {
-    return jsonError(400, `El monto excede el saldo pendiente (quedan ${fromCents(totalCents - alreadyPaidCents)})`);
-  }
+    const allPayments = await tx.select().from(payments).where(eq(payments.invoiceId, invoiceId));
+    const alreadyPaidCents = allPayments.reduce((sum, p) => sum + toCents(p.amount), 0);
+    const totalCents = toCents(invoice.total);
+    const amountCents = toCents(amount);
+    if (alreadyPaidCents + amountCents > totalCents) {
+      return jsonError(400, `El monto excede el saldo pendiente (quedan ${fromCents(totalCents - alreadyPaidCents)})`);
+    }
 
-  await db.insert(payments).values({
-    invoiceId,
-    amount: fromCents(amountCents),
-    method,
-    reference: reference || null,
-    date: new Date(),
-    receivedBy: user!.id,
+    await tx.insert(payments).values({
+      invoiceId,
+      amount: fromCents(amountCents),
+      method,
+      reference: reference || null,
+      date: new Date(),
+      receivedBy: user!.id,
+    });
+
+    const paidCents = alreadyPaidCents + amountCents;
+    const newStatus = paidCents >= totalCents ? 'pagada' : paidCents > 0 ? 'parcial' : invoice.status;
+
+    await tx.update(invoices).set({ status: newStatus }).where(eq(invoices.id, invoiceId));
+
+    return jsonOk({ success: true, newStatus });
   });
-
-  const paidCents = alreadyPaidCents + amountCents;
-  const newStatus = paidCents >= totalCents ? 'pagada' : paidCents > 0 ? 'parcial' : invoice.status;
-
-  await db.update(invoices).set({ status: newStatus }).where(eq(invoices.id, invoiceId));
-
-  return jsonOk({ success: true, newStatus });
 };

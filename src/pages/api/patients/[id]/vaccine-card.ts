@@ -4,8 +4,8 @@ import { patients, owners } from '../../../../db/schema/patients';
 import { vaccines } from '../../../../db/schema/medical';
 import { users } from '../../../../db/schema/users';
 import { eq, and, desc } from 'drizzle-orm';
-import { renderToStream } from '@react-pdf/renderer';
-import { createElement } from 'react';
+import { renderToBuffer, type DocumentProps } from '@react-pdf/renderer';
+import { createElement, type ReactElement } from 'react';
 import { VaccineCardPDF } from '../../../../lib/pdf/vaccine-card-template';
 
 const STAFF_ROLES = ['admin', 'veterinario', 'recepcionista'];
@@ -45,17 +45,11 @@ export const GET: APIRoute = async ({ params, locals }) => {
     .where(and(eq(vaccines.patientId, patientId)))
     .orderBy(desc(vaccines.applicationDate));
 
-  const stream = await renderToStream(
-    createElement(VaccineCardPDF, { pet: patient, vaccines: vaccineList })
+  const buffer = await renderToBuffer(
+    createElement(VaccineCardPDF, { pet: patient, vaccines: vaccineList }) as ReactElement<DocumentProps>
   );
 
-  const chunks: Buffer[] = [];
-  for await (const chunk of stream as any) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-  }
-  const buffer = Buffer.concat(chunks);
-
-  return new Response(buffer, {
+  return new Response(new Uint8Array(buffer), {
     headers: {
       'Content-Type': 'application/pdf',
       'Content-Disposition': `inline; filename="carnet-vacunas-${patient.name.replace(/\s+/g, '-').toLowerCase()}.pdf"`,

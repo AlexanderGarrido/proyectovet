@@ -1,3 +1,4 @@
+import { medicalRecords } from '../../../db/schema/medical';
 import type { APIRoute } from 'astro';
 import { db } from '../../../db';
 import { prescriptions, prescriptionItems } from '../../../db/schema/prescriptions';
@@ -51,6 +52,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   if (!patientId || !items || items.length === 0) {
     return new Response(JSON.stringify({ error: 'Paciente e items requeridos' }), { status: 400 });
+  }
+
+  if (medicalRecordId) {
+    const [record] = await db.select({ patientId: medicalRecords.patientId }).from(medicalRecords).where(eq(medicalRecords.id, Number(medicalRecordId)));
+    if (!record || record.patientId !== Number(patientId)) return new Response(JSON.stringify({ error: 'La consulta no pertenece al paciente seleccionado' }), { status: 400 });
   }
 
   const newPrescription = await db.transaction(async (tx) => {

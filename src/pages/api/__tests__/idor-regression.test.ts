@@ -22,14 +22,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 function makeChain(resolvedValue: any[]) {
   const chain: any = {};
-  ['from', 'leftJoin', 'innerJoin', 'where', 'orderBy', 'limit', 'offset'].forEach((m) => {
+  ['from', 'leftJoin', 'innerJoin', 'where', 'orderBy', 'limit', 'offset', 'for'].forEach((m) => {
     chain[m] = vi.fn(() => chain);
   });
   chain.then = (resolve: any, reject: any) => Promise.resolve(resolvedValue).then(resolve, reject);
   return chain;
 }
 
-vi.mock('../../../db', () => ({ db: { select: vi.fn() } }));
+vi.mock('../../../db', () => ({ db: { select: vi.fn(), execute: vi.fn(), transaction: vi.fn(async callback => callback(db)) } }));
 vi.mock('../../../lib/auth', () => ({ auth: {} }));
 
 import { db } from '../../../db';
@@ -58,6 +58,7 @@ const outsiderUser = { id: 'outsider-1', role: 'desconocido' };
 
 beforeEach(() => {
   vi.mocked(db.select).mockReset();
+  vi.mocked(db.select).mockReturnValue(makeChain([]));
 });
 
 describe('C1 — RBAC en /api/appointments/:id', () => {
@@ -94,12 +95,18 @@ describe('C1 — RBAC en /api/appointments/:id', () => {
       } as any);
       expect(res.status).not.toBe(403);
     } catch (err: any) {
-      expect(err.message).toMatch(/update is not a function/);
+      expect(err.message).toMatch(/(?:update|transaction) is not a function/);
     }
   });
 
+  it('GET → 403 para veterinario no asignado', async () => {
+    queueSelectResults([{ id: 1, ownerId: 99, veterinarianId: 'otro-vet' }]);
+    const res = await apptDetailGET({ params: { id: '1' }, locals: { user: { id: 'staff-1', role: 'veterinario' } } } as any);
+    expect(res.status).toBe(403);
+  });
+
   it('GET → 200 para staff', async () => {
-    queueSelectResults([{ id: 1, ownerId: 99 }]);
+    queueSelectResults([{ id: 1, ownerId: 99, veterinarianId: 'staff-1' }]);
     const res = await apptDetailGET({
       params: { id: '1' },
       locals: { user: { id: 'staff-1', role: 'veterinario' }, session: {} },

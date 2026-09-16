@@ -1,3 +1,4 @@
+import { fetchFormChoices, safeVisitReturn } from '../../lib/form-context';
 import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
@@ -21,7 +22,7 @@ const typeLabels: Record<string, string> = {
   otro: 'Otro',
 };
 
-export function ConsentForm({ patientId }: { patientId?: number }) {
+export function ConsentForm({ patientId, returnTo }: { patientId?: number; returnTo?: string }) {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [signature, setSignature] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -32,7 +33,7 @@ export function ConsentForm({ patientId }: { patientId?: number }) {
   });
 
   useEffect(() => {
-    fetch('/api/patients').then((r) => r.json()).then(setPatients);
+    fetchFormChoices<Patient>('/api/patients', patientId).then(setPatients).catch((e) => setError(e.message));
   }, []);
 
   async function onSubmit(data: FormData) {
@@ -41,6 +42,7 @@ export function ConsentForm({ patientId }: { patientId?: number }) {
 
     setLoading(true);
     setError('');
+    try {
     const res = await fetch('/api/consents', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -56,7 +58,9 @@ export function ConsentForm({ patientId }: { patientId?: number }) {
     const json = await res.json();
     if (!res.ok) { toast.error(json.error || 'Error al guardar'); setError(json.error || 'Error al guardar'); setLoading(false); return; }
     toast.success('Consentimiento registrado');
-    window.location.href = `/api/consents/${json.id}/pdf`;
+    window.location.href = safeVisitReturn(returnTo) || `/api/consents/${json.id}/pdf`;
+    } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo guardar. Reintenta.'); }
+    finally { setLoading(false); }
   }
 
   return (
@@ -110,7 +114,7 @@ export function ConsentForm({ patientId }: { patientId?: number }) {
         <button type="submit" disabled={loading} className="bg-primary text-primary-foreground px-6 py-2 rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-60 transition-colors">
           {loading ? 'Guardando...' : 'Registrar consentimiento'}
         </button>
-        <button type="button" onClick={() => history.back()} className="px-6 py-2 rounded-lg text-sm font-medium border hover:bg-muted transition-colors">
+        <button type="button" onClick={() => { window.location.href = safeVisitReturn(returnTo) || "/consentimientos"; }} className="px-6 py-2 rounded-lg text-sm font-medium border hover:bg-muted transition-colors">
           Cancelar
         </button>
       </div>

@@ -1,7 +1,9 @@
 ---
+import { readFormContext, positiveId } from '../../lib/form-context';
 import DashboardLayout from '../../layouts/DashboardLayout.astro';
 import { LabOrderForm } from '../../components/lab-orders/LabOrderForm';
 
+const context = readFormContext(Astro.url.searchParams);
 const user = Astro.locals.user;
 if (!user) return Astro.redirect('/login');
 if (user.role !== 'admin' && user.role !== 'veterinario') return Astro.redirect('/ordenes');
@@ -9,9 +11,9 @@ if (user.role !== 'admin' && user.role !== 'veterinario') return Astro.redirect(
 
 <DashboardLayout title="Nueva Orden de Laboratorio" pageTitle="Nueva Orden de Laboratorio">
   <div class="mb-4">
-    <a href="/ordenes" class="text-sm text-muted-foreground hover:text-foreground transition-colors">← Volver a Órdenes</a>
+    <a href={context.returnTo || "/ordenes"} class="text-sm text-muted-foreground hover:text-foreground transition-colors">← Volver a Órdenes</a>
   </div>
   <div class="rounded-xl border bg-card p-6 max-w-xl">
-    <LabOrderForm client:load />
+    <LabOrderForm client:load medicalRecordId={positiveId(Astro.url.searchParams.get('medicalRecordId'))} {...context} />
   </div>
 </DashboardLayout>

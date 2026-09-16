@@ -1,16 +1,18 @@
 ---
+import { readFormContext } from '../../lib/form-context';
 import DashboardLayout from '../../layouts/DashboardLayout.astro';
 import { InvoiceForm } from '../../components/billing/InvoiceForm';
 
+const context = readFormContext(Astro.url.searchParams);
 const user = Astro.locals.user;
 if (!user) return Astro.redirect('/login');
 ---
 
 <DashboardLayout title="Nueva Factura" pageTitle="Nueva Factura">
   <div class="mb-6">
-    <a href="/facturacion" class="text-sm text-muted-foreground hover:text-foreground transition-colors">← Volver a Facturación</a>
+    <a href={context.returnTo || "/facturacion"} class="text-sm text-muted-foreground hover:text-foreground transition-colors">← Volver a Facturación</a>
   </div>
   <div class="max-w-3xl rounded-xl border bg-card p-6">
-    <InvoiceForm client:load />
+    <InvoiceForm client:load {...context} />
   </div>
 </DashboardLayout>

@@ -26,17 +26,22 @@ function openDb(): Promise<IDBDatabase> {
   });
 }
 
-export async function saveDraft<T>(key: string, data: T): Promise<void> {
+export async function saveDraft<T>(key: string, data: T): Promise<boolean> {
+  let db: IDBDatabase | undefined;
   try {
-    const db = await openDb();
+    db = await openDb();
     await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(STORE, 'readwrite');
+      const tx = db!.transaction(STORE, 'readwrite');
       tx.objectStore(STORE).put({ data, savedAt: Date.now() }, key);
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
     });
+    return true;
   } catch {
-    // Best-effort: si el navegador no soporta IndexedDB o falla, no bloquea el formulario.
+    return false;
+  } finally {
+    db?.close();
   }
 }
 

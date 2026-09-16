@@ -40,7 +40,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   try {
     await db.transaction(async (tx) => {
-      const [product] = await tx.select({ stock: products.stock }).from(products).where(eq(products.id, productId));
+      const [product] = await tx.select({ stock: products.stock }).from(products).where(eq(products.id, productId)).for('update');
       if (!product) throw new StockOpError('Producto no encontrado', 404);
 
       if (fromLocationId) {

@@ -4,8 +4,8 @@ import { consentForms } from '../../../../db/schema/consents';
 import { patients, owners } from '../../../../db/schema/patients';
 import { users } from '../../../../db/schema/users';
 import { eq } from 'drizzle-orm';
-import { renderToStream } from '@react-pdf/renderer';
-import { createElement } from 'react';
+import { renderToBuffer, type DocumentProps } from '@react-pdf/renderer';
+import { createElement, type ReactElement } from 'react';
 import { ConsentPDF } from '../../../../lib/pdf/consent-template';
 import { requirePermission } from '../../../../lib/guard';
 
@@ -34,17 +34,11 @@ export const GET: APIRoute = async ({ params, locals }) => {
 
   if (!consent) return new Response('No encontrado', { status: 404 });
 
-  const stream = await renderToStream(
-    createElement(ConsentPDF, { consent: { ...consent, createdAt: consent.createdAt.toISOString() } })
+  const buffer = await renderToBuffer(
+    createElement(ConsentPDF, { consent: { ...consent, createdAt: consent.createdAt.toISOString() } }) as ReactElement<DocumentProps>
   );
 
-  const chunks: Buffer[] = [];
-  for await (const chunk of stream as any) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-  }
-  const buffer = Buffer.concat(chunks);
-
-  return new Response(buffer, {
+  return new Response(new Uint8Array(buffer), {
     headers: {
       'Content-Type': 'application/pdf',
       'Content-Disposition': `inline; filename="consentimiento-${id}.pdf"`,

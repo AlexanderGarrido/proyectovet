@@ -6,6 +6,7 @@ const user = Astro.locals.user;
 if (!user) return Astro.redirect('/login');
 ---
 
-<DashboardLayout title="Facturación" pageTitle="Facturación">
+<DashboardLayout title="Facturación" pageTitle="Cobros">
+  <nav class="flex gap-4 text-sm text-primary mb-5"><a href="/facturacion/reportes">Reportes de cobros</a><a href="/metricas">Métricas</a></nav>
   <InvoiceList client:load showReports={user.role === 'admin' || user.role === 'recepcionista'} />
 </DashboardLayout>

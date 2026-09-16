@@ -1,3 +1,4 @@
+import { fetchFormChoices, safeVisitReturn } from '../../lib/form-context';
 import { useState, useEffect } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -5,7 +6,7 @@ import { toast } from 'sonner';
 interface Patient { id: number; name: string; ownerFirstName?: string; ownerLastName?: string; }
 interface MedItem { medicationName: string; dosage: string; frequency: string; duration: string; instructions: string; quantity: string; }
 
-export function PrescriptionForm({ patientId: defaultPatientId, medicalRecordId }: { patientId?: number; medicalRecordId?: number }) {
+export function PrescriptionForm({ patientId: defaultPatientId, medicalRecordId, returnTo }: { patientId?: number; medicalRecordId?: number; returnTo?: string }) {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [patientId, setPatientId] = useState(defaultPatientId?.toString() || '');
   const [items, setItems] = useState<MedItem[]>([{ medicationName: '', dosage: '', frequency: '', duration: '', instructions: '', quantity: '1' }]);
@@ -14,7 +15,7 @@ export function PrescriptionForm({ patientId: defaultPatientId, medicalRecordId 
   const [error, setError] = useState('');
 
   useEffect(() => {
-    fetch('/api/patients').then((r) => r.json()).then(setPatients);
+    fetchFormChoices<Patient>('/api/patients', defaultPatientId).then(setPatients).catch((e) => setError(e.message));
   }, []);
 
   function addItem() { setItems([...items, { medicationName: '', dosage: '', frequency: '', duration: '', instructions: '', quantity: '1' }]); }
@@ -31,15 +32,18 @@ export function PrescriptionForm({ patientId: defaultPatientId, medicalRecordId 
     if (items.some((it) => !it.medicationName)) { setError('Todos los medicamentos deben tener nombre'); return; }
     setLoading(true);
     setError('');
+    try {
     const res = await fetch('/api/prescriptions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ patientId: Number(patientId), medicalRecordId: medicalRecordId || null, items, notes }),
+      body: JSON.stringify({ patientId: Number(patientId), medicalRecordId: Number(patientId) === defaultPatientId ? medicalRecordId || null : null, items, notes }),
     });
     const json = await res.json();
     if (!res.ok) { toast.error(json.error || 'Error al guardar'); setError(json.error || 'Error al guardar'); setLoading(false); return; }
     toast.success('Receta creada correctamente');
-    setTimeout(() => { window.location.href = `/recetas/${json.id}`; }, 500);
+    setTimeout(() => { window.location.href = safeVisitReturn(returnTo) || `/recetas/${json.id}`; }, 500);
+    } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo guardar. Reintenta.'); }
+    finally { setLoading(false); }
   }
 
   return (
@@ -123,7 +127,7 @@ export function PrescriptionForm({ patientId: defaultPatientId, medicalRecordId 
           className="bg-primary text-primary-foreground px-6 py-2 rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-60 transition-colors">
           {loading ? 'Guardando...' : 'Emitir Receta'}
         </button>
-        <a href="/recetas" className="px-6 py-2 rounded-lg text-sm font-medium border hover:bg-muted transition-colors">Cancelar</a>
+        <a href={safeVisitReturn(returnTo) || "/recetas"} className="px-6 py-2 rounded-lg text-sm font-medium border hover:bg-muted transition-colors">Cancelar</a>
       </div>
     </form>
   );

@@ -1,24 +1,26 @@
 ---
+import { readFormContext, positiveId } from '../../lib/form-context';
 import DashboardLayout from '../../layouts/DashboardLayout.astro';
 import { PrescriptionForm } from '../../components/prescriptions/PrescriptionForm';
 
+const context = readFormContext(Astro.url.searchParams);
 const user = Astro.locals.user;
 if (!user) return Astro.redirect('/login');
 if (user.role !== 'admin' && user.role !== 'veterinario') return Astro.redirect('/recetas');
 
-const patientId = Astro.url.searchParams.get('patientId');
 const medicalRecordId = Astro.url.searchParams.get('medicalRecordId');
 ---
 
 <DashboardLayout title="Nueva Receta" pageTitle="Emitir Receta">
   <div class="mb-6">
-    <a href="/recetas" class="text-sm text-muted-foreground hover:text-foreground transition-colors">← Volver a Recetas</a>
+    <a href={context.returnTo || "/recetas"} class="text-sm text-muted-foreground hover:text-foreground transition-colors">← Volver a Recetas</a>
   </div>
   <div class="max-w-2xl rounded-xl border bg-card p-6">
     <PrescriptionForm
       client:load
-      patientId={patientId ? Number(patientId) : undefined}
-      medicalRecordId={medicalRecordId ? Number(medicalRecordId) : undefined}
+      returnTo={context.returnTo}
+      patientId={context.patientId}
+      medicalRecordId={positiveId(medicalRecordId)}
     />
   </div>
 </DashboardLayout>

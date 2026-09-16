@@ -57,6 +57,9 @@ export const appointments = pgTable('appointments', {
   notes: text('notes'),
   visitAddress: varchar('visit_address', { length: 500 }),
   reminderSent: boolean('reminder_sent').notNull().default(false),
+  startedAt: timestamp('started_at'),
+  completedAt: timestamp('completed_at'),
+  noCharge: boolean('no_charge').notNull().default(false),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow().$onUpdate(() => new Date()),
 }, (t) => ({

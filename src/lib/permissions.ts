@@ -92,17 +92,13 @@ export function requiresOwnershipCheck(role: UserRole, resource: string, action:
 // más de una sección presente.
 export function getNavItems(role: UserRole) {
   const allItems = [
-    { label: 'Dashboard', href: '/dashboard', icon: 'LayoutDashboard', permission: 'dashboard:read', section: 'Principal' },
-    { label: 'Pacientes', href: '/pacientes', icon: 'PawPrint', permission: 'patients:read', section: 'Gestión' },
-    { label: 'Tutores', href: '/tutores', icon: 'Users', permission: 'owners:read', section: 'Gestión' },
-    { label: 'Citas', href: '/citas', icon: 'Calendar', permission: 'appointments:read', section: 'Gestión' },
-    { label: 'Recetas', href: '/recetas', icon: 'FileText', permission: 'prescriptions:read', section: 'Gestión' },
-    { label: 'Consentimientos', href: '/consentimientos', icon: 'FileSignature', permission: 'consents:read', section: 'Gestión' },
-    { label: 'Laboratorio', href: '/ordenes', icon: 'FlaskConical', permission: 'lab-orders:read', section: 'Gestión' },
-    { label: 'Inventario', href: '/inventario', icon: 'Package', permission: 'inventory:read', section: 'Gestión' },
-    { label: 'Facturacion', href: '/facturacion', icon: 'Receipt', permission: 'invoices:read', section: 'Gestión' },
-    { label: 'Metricas', href: '/metricas', icon: 'BarChart3', permission: 'invoices:read', section: 'Reportes' },
-    { label: 'Configuracion', href: '/configuracion', icon: 'Settings', permission: 'admin', section: 'Sistema' },
+    { label: 'Hoy', href: '/dashboard', icon: 'LayoutDashboard', permission: 'dashboard:read', section: 'Principal' },
+    { label: 'Agenda', href: '/citas', icon: 'Calendar', permission: 'appointments:read', section: 'Principal' },
+    { label: 'Pacientes', href: '/pacientes', icon: 'PawPrint', permission: 'patients:read', section: 'Principal' },
+    { label: 'Botiquín', href: '/inventario', icon: 'Package', permission: 'inventory:read', section: 'Principal' },
+    { label: 'Cobros', href: '/facturacion', icon: 'Receipt', permission: 'invoices:read', section: 'Principal' },
+    { label: 'Reportes', href: '/metricas', icon: 'BarChart3', permission: 'admin', section: 'Administración' },
+    { label: 'Configuración', href: '/configuracion', icon: 'Settings', permission: 'admin', section: 'Administración' },
   ];
 
   return allItems.filter((item) => {

@@ -13,7 +13,7 @@ interface Product { id: number; name: string; unit: string; stock: string; }
 interface SupplyRow { productId: string; quantity: string; }
 interface StockLocation { id: number; name: string; type: 'central' | 'vehiculo'; }
 
-export function MedicalRecordForm({ patientId, appointmentId }: { patientId?: number; appointmentId?: number }) {
+export function MedicalRecordForm({ patientId, appointmentId, userId }: { patientId?: number; appointmentId?: number; userId: string }) {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [locations, setLocations] = useState<StockLocation[]>([]);
@@ -25,7 +25,7 @@ export function MedicalRecordForm({ patientId, appointmentId }: { patientId?: nu
   const [error, setError] = useState('');
 
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
-  const draftKey = `medical-record:${patientId ?? 'new'}:${appointmentId ?? 'none'}`;
+  const draftKey = `medical-record:${userId}:${patientId ?? 'new'}:${appointmentId ?? 'none'}`;
   const restoredRef = useRef(false);
 
   const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<MedicalRecordFormData>({
@@ -34,8 +34,8 @@ export function MedicalRecordForm({ patientId, appointmentId }: { patientId?: nu
   });
 
   useEffect(() => {
-    fetch('/api/patients').then((r) => r.json()).then(setPatients);
-    fetch('/api/inventory').then((r) => r.json()).then(setProducts);
+    fetch('/api/patients').then((r) => { if (!r.ok) throw new Error(); return r.json(); }).then(setPatients).catch(() => setError('No se pudieron cargar los pacientes. Reintenta cuando vuelva la conexión.'));
+    fetch('/api/inventory').then((r) => r.ok ? r.json() : []).then(setProducts).catch(() => {});
     fetch('/api/inventory/locations').then((r) => (r.ok ? r.json() : [])).then(setLocations).catch(() => {});
   }, []);
 
@@ -72,7 +72,7 @@ export function MedicalRecordForm({ patientId, appointmentId }: { patientId?: nu
     const hasContent = formValues.reason || formValues.subjective || formValues.diagnosis || formValues.treatment || photos.length > 0;
     if (!hasContent) return;
     const timer = setTimeout(() => {
-      saveDraft(draftKey, { form: formValues, supplies, photos, locationId }).then(() => setLastSavedAt(Date.now()));
+      saveDraft(draftKey, { form: formValues, supplies, photos, locationId }).then((saved) => setLastSavedAt(saved ? Date.now() : null));
     }, 1200);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -124,27 +124,34 @@ export function MedicalRecordForm({ patientId, appointmentId }: { patientId?: nu
         locationId: locationId ? Number(locationId) : null,
       }));
 
-    const res = await fetch('/api/medical', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        patientId: Number(data.patientId),
-        appointmentId: appointmentId || null,
-        reason: data.reason,
-        subjective: data.subjective,
-        diagnosis: data.diagnosis,
-        treatment: data.treatment,
-        observations: data.observations,
-        vitalSigns: Object.keys(vitalSigns).length > 0 ? vitalSigns : null,
-        suppliesUsed: suppliesUsed.length > 0 ? suppliesUsed : null,
-        photos: photos.length > 0 ? photos : null,
-      }),
-    });
-    const json = await res.json();
-    if (!res.ok) { toast.error(json.error || 'Error al guardar'); setError(json.error || 'Error al guardar'); setLoading(false); return; }
-    await deleteDraft(draftKey);
-    toast.success('Registro médico guardado correctamente');
-    setTimeout(() => { window.location.href = `/pacientes/${data.patientId}`; }, 500);
+    try {
+      const res = await fetch('/api/medical', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          patientId: Number(data.patientId),
+          appointmentId: appointmentId || null,
+          reason: data.reason,
+          subjective: data.subjective,
+          diagnosis: data.diagnosis,
+          treatment: data.treatment,
+          observations: data.observations,
+          vitalSigns: Object.keys(vitalSigns).length > 0 ? vitalSigns : null,
+          suppliesUsed: suppliesUsed.length > 0 ? suppliesUsed : null,
+          photos: photos.length > 0 ? photos : null,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) { toast.error(json.error || 'Error al guardar'); setError(json.error || 'Error al guardar'); return; }
+      await deleteDraft(draftKey);
+      toast.success('Registro médico guardado correctamente');
+      setTimeout(() => { window.location.href = `/pacientes/${data.patientId}`; }, 500);
+    } catch {
+      setError('No se pudo confirmar el guardado. Revisa la conexión antes de reintentar.');
+      toast.error('No se pudo confirmar el guardado');
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (

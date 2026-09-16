@@ -3,8 +3,8 @@ import { db } from '../../../../db';
 import { invoices, invoiceItems } from '../../../../db/schema/billing';
 import { owners } from '../../../../db/schema/patients';
 import { eq } from 'drizzle-orm';
-import { renderToStream } from '@react-pdf/renderer';
-import { createElement } from 'react';
+import { renderToBuffer, type DocumentProps } from '@react-pdf/renderer';
+import { createElement, type ReactElement } from 'react';
 import { InvoicePDF } from '../../../../lib/pdf/invoice-template';
 import { requireUnscopedPermission } from '../../../../lib/guard';
 
@@ -33,7 +33,7 @@ export const GET: APIRoute = async ({ params, locals }) => {
 
   const items = await db.select().from(invoiceItems).where(eq(invoiceItems.invoiceId, id));
 
-  const stream = await renderToStream(
+  const buffer = await renderToBuffer(
     createElement(InvoicePDF, {
       invoice: { ...inv, date: inv.date.toISOString() },
       items: items.map((i) => ({
@@ -42,16 +42,10 @@ export const GET: APIRoute = async ({ params, locals }) => {
         unitPrice: i.unitPrice,
         subtotal: i.subtotal,
       })),
-    })
+    }) as ReactElement<DocumentProps>
   );
 
-  const chunks: Buffer[] = [];
-  for await (const chunk of stream as any) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-  }
-  const buffer = Buffer.concat(chunks);
-
-  return new Response(buffer, {
+  return new Response(new Uint8Array(buffer), {
     headers: {
       'Content-Type': 'application/pdf',
       'Content-Disposition': `inline; filename="factura-${inv.invoiceNumber}.pdf"`,

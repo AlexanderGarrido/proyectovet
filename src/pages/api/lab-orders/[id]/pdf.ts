@@ -4,8 +4,8 @@ import { labOrders } from '../../../../db/schema/prescriptions';
 import { patients, owners } from '../../../../db/schema/patients';
 import { users } from '../../../../db/schema/users';
 import { eq } from 'drizzle-orm';
-import { renderToStream } from '@react-pdf/renderer';
-import { createElement } from 'react';
+import { renderToBuffer, type DocumentProps } from '@react-pdf/renderer';
+import { createElement, type ReactElement } from 'react';
 import { LabOrderPDF } from '../../../../lib/pdf/lab-order-template';
 import { requireUnscopedPermission } from '../../../../lib/guard';
 
@@ -34,23 +34,17 @@ export const GET: APIRoute = async ({ params, locals }) => {
 
   if (!order) return new Response('No encontrada', { status: 404 });
 
-  const stream = await renderToStream(
+  const buffer = await renderToBuffer(
     createElement(LabOrderPDF, {
       order: {
         ...order,
         requestedAt: order.requestedAt.toISOString(),
         completedAt: order.completedAt ? order.completedAt.toISOString() : null,
       },
-    })
+    }) as ReactElement<DocumentProps>
   );
 
-  const chunks: Buffer[] = [];
-  for await (const chunk of stream as any) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-  }
-  const buffer = Buffer.concat(chunks);
-
-  return new Response(buffer, {
+  return new Response(new Uint8Array(buffer), {
     headers: {
       'Content-Type': 'application/pdf',
       'Content-Disposition': `inline; filename="orden-examenes-${id}.pdf"`,

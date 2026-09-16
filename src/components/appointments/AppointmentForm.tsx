@@ -3,6 +3,8 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { appointmentFormSchema, type AppointmentFormData } from '../../lib/schemas';
 import { authClient } from '../../lib/auth-client';
+import { toClinicInput } from '../../lib/clinic-time';
+import { appointmentRequest, fetchFormData, fetchFormChoices, preserveFormChoice, safeVisitReturn } from '../../lib/form-context';
 import { toast } from 'sonner';
 
 interface Patient {
@@ -19,30 +21,48 @@ interface Veterinarian {
   name: string;
 }
 
-export function AppointmentForm({ appointmentId }: { appointmentId?: number }) {
+export function AppointmentForm({ appointmentId, patientId, followup = false, returnTo }: { appointmentId?: number; patientId?: number; followup?: boolean; returnTo?: string }) {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [veterinarians, setVeterinarians] = useState<Veterinarian[]>([]);
+  const [ready, setReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const { data: session } = authClient.useSession();
 
-  const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<AppointmentFormData>({
+  const { register, handleSubmit, watch, setValue, reset, getValues, formState: { errors } } = useForm<AppointmentFormData>({
     resolver: zodResolver(appointmentFormSchema),
-    defaultValues: { type: 'consulta' },
+    defaultValues: { type: followup ? 'control' : 'consulta', patientId: patientId?.toString() || '' },
   });
 
   const selectedPatientId = watch('patientId');
 
   useEffect(() => {
-    fetch('/api/patients').then((r) => r.json()).then(setPatients);
-    fetch('/api/veterinarians').then((r) => r.json()).then(setVeterinarians);
+    async function load() {
+      try {
+        const a = appointmentId ? await fetchFormData<AppointmentFormData & { veterinarianName?: string | null }>(`/api/appointments/${appointmentId}`) : undefined;
+        const [p, v] = await Promise.all([
+          fetchFormChoices<Patient>('/api/patients', a ? Number(a.patientId) : patientId),
+          fetchFormData<Veterinarian[]>('/api/veterinarians'),
+        ]);
+        setPatients(p);
+        setVeterinarians(preserveFormChoice(v, a ? {
+          id: a.veterinarianId,
+          name: `${a.veterinarianName || 'Profesional asignado'} (asignación actual; no activo)`,
+        } : undefined));
+        if (a) reset({ ...a, patientId: String(a.patientId), ownerId: String(a.ownerId),
+          scheduledAt: toClinicInput(a.scheduledAt), endAt: toClinicInput(a.endAt),
+          visitAddress: a.visitAddress || '', reason: a.reason || '', notes: a.notes || '' });
+        setReady(true);
+      } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo cargar la cita'); }
+    }
+    void load();
   }, []);
 
   // Preselecciona al veterinario en sesión (si es uno), pero el campo queda
   // visible y editable para cuando recepción agenda a nombre de otro vet.
   useEffect(() => {
     const role = (session?.user as { role?: string } | undefined)?.role;
-    if (session?.user?.id && role === 'veterinario') {
+    if (!appointmentId && !getValues('veterinarianId') && session?.user?.id && role === 'veterinario') {
       setValue('veterinarianId', session.user.id);
     }
   }, [session]);
@@ -50,29 +70,33 @@ export function AppointmentForm({ appointmentId }: { appointmentId?: number }) {
   useEffect(() => {
     if (selectedPatientId) {
       const p = patients.find((p) => String(p.id) === selectedPatientId);
-      if (p) {
+      if (p && !appointmentId) {
         setValue('ownerId', String(p.ownerId));
-        if (!appointmentId && p.ownerAddress) {
-          setValue('visitAddress', p.ownerAddress);
+        if (!appointmentId) {
+          setValue('visitAddress', p.ownerAddress || '');
         }
       }
     }
   }, [selectedPatientId, patients]);
 
   async function onSubmit(data: AppointmentFormData) {
+    if (!ready) return;
     setLoading(true);
     setError('');
     const url = appointmentId ? `/api/appointments/${appointmentId}` : '/api/appointments';
     const method = appointmentId ? 'PUT' : 'POST';
+    try {
     const res = await fetch(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
+      body: JSON.stringify(appointmentRequest(data)),
     });
     const json = await res.json();
     if (!res.ok) { setError(json.error || 'Error al guardar'); toast.error(json.error || 'Error al guardar'); setLoading(false); return; }
     toast.success(appointmentId ? 'Cita actualizada' : 'Cita programada correctamente');
     setTimeout(() => { window.location.href = `/citas/${json.id}`; }, 500);
+    } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo guardar. Reintenta.'); }
+    finally { setLoading(false); }
   }
 
   return (
@@ -82,7 +106,7 @@ export function AppointmentForm({ appointmentId }: { appointmentId?: number }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="sm:col-span-2">
           <label className="block text-sm font-medium mb-1">Paciente *</label>
-          <select {...register('patientId')} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30">
+          <select aria-disabled={!!appointmentId} {...register('patientId')} onChange={appointmentId ? () => {} : register('patientId').onChange} value={appointmentId ? selectedPatientId : undefined} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30">
             <option value="">Seleccionar paciente...</option>
             {patients.map((p) => (
               <option key={p.id} value={p.id}>{p.name} — {p.ownerFirstName} {p.ownerLastName}</option>
@@ -99,6 +123,7 @@ export function AppointmentForm({ appointmentId }: { appointmentId?: number }) {
             <option value="cirugia">Cirugía</option>
             <option value="control">Control</option>
             <option value="emergencia">Emergencia</option>
+            <option value="desparasitacion">Desparasitación</option>
             <option value="grooming">Grooming</option>
           </select>
         </div>
@@ -150,10 +175,10 @@ export function AppointmentForm({ appointmentId }: { appointmentId?: number }) {
       </div>
 
       <div className="flex gap-3">
-        <button type="submit" disabled={loading} className="bg-primary text-primary-foreground px-6 py-2 rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-60 transition-colors">
+        <button type="submit" disabled={loading || !ready} className="bg-primary text-primary-foreground px-6 py-2 rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-60 transition-colors">
           {loading ? 'Guardando...' : appointmentId ? 'Actualizar Cita' : 'Programar Cita'}
         </button>
-        <a href="/citas" className="px-6 py-2 rounded-lg text-sm font-medium border hover:bg-muted transition-colors">Cancelar</a>
+        <a href={safeVisitReturn(returnTo) || (appointmentId ? `/citas/${appointmentId}` : "/citas")} className="px-6 py-2 rounded-lg text-sm font-medium border hover:bg-muted transition-colors">Cancelar</a>
       </div>
     </form>
   );

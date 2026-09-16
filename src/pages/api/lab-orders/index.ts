@@ -1,3 +1,4 @@
+import { medicalRecords } from '../../../db/schema/medical';
 import type { APIRoute } from 'astro';
 import { db } from '../../../db';
 import { labOrders } from '../../../db/schema/prescriptions';
@@ -43,6 +44,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const result_ = labOrderCreateSchema.safeParse(parsed.data);
   if (!result_.success) return zodError(result_.error);
   const { patientId, medicalRecordId, type, description } = result_.data;
+
+  if (medicalRecordId) {
+    const [record] = await db.select({ patientId: medicalRecords.patientId }).from(medicalRecords).where(eq(medicalRecords.id, Number(medicalRecordId)));
+    if (!record || record.patientId !== Number(patientId)) return new Response(JSON.stringify({ error: 'La consulta no pertenece al paciente seleccionado' }), { status: 400 });
+  }
 
   const [newOrder] = await db.insert(labOrders).values({
     patientId,

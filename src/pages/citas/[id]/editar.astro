@@ -6,6 +6,7 @@ const user = Astro.locals.user;
 if (!user) return Astro.redirect('/login');
 
 const id = Number(Astro.params.id);
+if (!Number.isSafeInteger(id) || id <= 0) return Astro.redirect('/citas');
 ---
 
 <DashboardLayout title="Editar Cita" pageTitle="Editar Cita">

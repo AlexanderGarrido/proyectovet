@@ -1,3 +1,4 @@
+import { appointments } from '../../../db/schema/appointments';
 import type { APIRoute } from 'astro';
 import { db } from '../../../db';
 import { medicalRecords, vaccines, medicalRecordAttachments } from '../../../db/schema/medical';
@@ -69,6 +70,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const result_ = medicalRecordCreateSchema.safeParse(parsed.data);
   if (!result_.success) return zodError(result_.error);
   const { patientId, appointmentId, date, reason, subjective, diagnosis, treatment, observations, vitalSigns, suppliesUsed, photos } = result_.data;
+
+  if (appointmentId) {
+    const [appointment] = await db.select().from(appointments).where(eq(appointments.id, appointmentId));
+    if (!appointment || appointment.patientId !== patientId) return new Response(JSON.stringify({ error: 'La cita no pertenece al paciente seleccionado' }), { status: 400 });
+    if (user.role === 'veterinario' && appointment.veterinarianId !== user.id) return new Response(JSON.stringify({ error: 'La cita está asignada a otro veterinario' }), { status: 403 });
+  }
 
   // Chequeo temprano (mejora UX: falla rápido con mensaje claro), pero NO es
   // la única defensa — la resta real es atómica dentro de la transacción de

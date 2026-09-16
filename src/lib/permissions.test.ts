@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { hasPermission, requiresOwnershipCheck } from './permissions';
+import { hasPermission, requiresOwnershipCheck, getNavItems } from './permissions';
 
 // ── hasPermission ─────────────────────────────────────────────────────────────
 describe('hasPermission', () => {
@@ -86,5 +86,20 @@ describe('requiresOwnershipCheck', () => {
 
   it('recepcionista → false para appointments:read (permiso directo)', () => {
     expect(requiresOwnershipCheck('recepcionista', 'appointments', 'read')).toBe(false);
+  });
+});
+
+describe('navegación de jornada', () => {
+  it.each(['admin', 'veterinario', 'recepcionista'] as const)('ofrece cinco entradas principales a %s', (role) => {
+    const items = getNavItems(role);
+    expect(items.filter((item) => item.section === 'Principal').map((item) => item.label))
+      .toEqual(['Hoy', 'Agenda', 'Pacientes', 'Botiquín', 'Cobros']);
+    expect(items.some((item) => ['/tutores', '/recetas', '/ordenes', '/consentimientos'].includes(item.href))).toBe(false);
+    expect(hasPermission(role, 'owners', 'write')).toBe(true);
+  });
+  it('reserva configuración y reportes secundarios del menú a administración', () => {
+    expect(getNavItems('admin').filter((item) => item.section !== 'Principal').map((item) => item.href)).toEqual(['/metricas', '/configuracion']);
+    expect(getNavItems('veterinario')).toHaveLength(5);
+    expect(getNavItems('recepcionista')).toHaveLength(5);
   });
 });

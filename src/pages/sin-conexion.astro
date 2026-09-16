@@ -1,0 +1,8 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { OfflineApp } from '../components/visits/OfflineApp';
+export const prerender = true;
+---
+<BaseLayout title="Mi jornada sin conexión">
+  <OfflineApp client:only="react"><p slot="fallback">Abriendo la jornada guardada en este dispositivo…</p></OfflineApp>
+</BaseLayout>

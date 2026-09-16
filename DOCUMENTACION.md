@@ -1,199 +1,75 @@
-# Documentación del Sistema — Alma Veterinaria
+# Operación de Alma Veterinaria
 
-Sistema de gestión para clínica veterinaria: pacientes, citas, historial médico,
-recetas, laboratorio, inventario y facturación, con autenticación por roles.
+## Recorrido diario
 
----
+1. **Hoy:** ver visitas propias si se inicia como veterinario, o la jornada del equipo como administración/recepción. Destaca la atención en curso o la primera pendiente, incluso si su horario ya pasó. Los límites del día se calculan en `America/Santiago`.
+2. **Preparar sin conexión:** descarga una copia acotada de las visitas del día, contactos, hasta 20 antecedentes y vacunas por paciente, cobros y stock disponible. La fecha de preparación queda visible.
+3. **Visita:** desde la cita se puede navegar al domicilio, llamar o preparar un WhatsApp. Iniciar atención registra la hora para calcular tiempos.
+4. **Atención:** redactar nota clínica, signos vitales, fotos e insumos. Los responsables se crean/editan desde la ficha o alta de paciente; no requieren cuenta propia.
+5. **Cobro y cierre:** registrar el servicio y, opcionalmente, un pago ya recibido. También se puede cerrar dejando saldo pendiente o indicando atención sin costo. La consulta es necesaria para cerrar.
+6. **Resumen:** imprimir/guardar como PDF desde el navegador, descargar texto o abrir WhatsApp para revisar y enviar manualmente. El resumen contiene motivo, evaluación e indicaciones; no incluye las observaciones internas.
+7. **Seguimiento:** “Programar control” abre la agenda con paciente y profesional en contexto. Recetas, laboratorio y consentimientos conservan paciente, registro clínico cuando existe y enlace de regreso.
 
-## 1. Stack tecnológico
+## Navegación
 
-| Capa | Tecnología |
+| Principal | Contenido |
 |---|---|
-| Framework | **Astro 6** (SSR, `output: 'server'`) |
-| UI | **React 19** (islas), Tailwind CSS 4, Recharts, lucide-react |
-| Autenticación | **Better Auth 1.5** (email + contraseña, cookies firmadas) |
-| ORM | **Drizzle ORM 0.45** |
-| Base de datos | **PostgreSQL** (Supabase) — *migrado desde MySQL* |
-| Validación | **Zod 4** |
-| PDF | `@react-pdf/renderer` (facturas y recetas) |
-| Recordatorios | WhatsApp clic-para-enviar (wa.me), sin proveedor externo |
-| Hosting | **Vercel** (adaptador `@astrojs/vercel`) |
+| Hoy | Jornada, visita actual, pendientes, saldos y tiempo promedio |
+| Agenda | Lista/calendario, alta, edición y acceso a la visita |
+| Pacientes | Ficha, responsable, vacunas, recetas, laboratorio, consentimientos |
+| Botiquín | Inventario, ubicaciones y movimientos |
+| Cobros | Servicios emitidos, pagos y acceso autorizado a reportes |
 
-> Histórico: el proyecto nació sobre **MySQL + Railway + Docker**. Se migró a
-> **PostgreSQL (Supabase) + Vercel**. Ver §7.
+Las rutas históricas de responsables/documentos se conservan para compatibilidad. Administración mantiene Configuración y Reportes en un nivel secundario.
 
----
+## Guardado y funcionamiento sin conexión
 
-## 2. Estructura del proyecto
+La jornada y los borradores se guardan en IndexedDB por usuario. Solo una sesión autenticada activa una identidad local. Las pantallas detectan cierre/cambio de sesión en otras pestañas y dejan de mostrar la jornada anterior.
 
-```
-src/
-├── components/        Componentes React por dominio
-│   ├── admin/         Gestión de usuarios y horarios
-│   ├── appointments/  Calendario, formulario y lista de citas
-│   ├── billing/       Facturas y pagos
-│   ├── dashboard/     Widgets (próxima cita, vacunas, facturas pendientes…)
-│   ├── inventory/     Productos y movimientos de stock
-│   ├── lab-orders/    Órdenes de laboratorio
-│   ├── medical/       Historial clínico
-│   ├── patients/      Pacientes y tutores
-│   ├── prescriptions/ Recetas
-│   ├── reports/       Gráficas de reportes
-│   ├── layout/        Shell, header, sidebar
-│   └── ui/            Primitivas (button, card, input, label)
-├── db/
-│   ├── index.ts       Cliente Drizzle (conexión Postgres)
-│   ├── schema/        7 archivos de esquema (ver §4)
-│   ├── seed.ts        Datos de demostración
-│   ├── clean.ts       Limpieza de tablas
-│   └── set-passwords.ts  Establece contraseñas a usuarios del seed
-├── layouts/           Layouts Astro (Auth, Base, Dashboard)
-├── lib/
-│   ├── auth.ts        Configuración de Better Auth (servidor)
-│   ├── auth-client.ts Cliente de Better Auth (navegador)
-│   ├── permissions.ts Matriz de permisos por rol
-│   ├── rateLimit.ts   Rate limiter en memoria
-│   ├── schemas.ts     Esquemas Zod de validación
-│   ├── whatsapp.ts    Enlaces wa.me para recordatorios de citas
-│   ├── pdf/           Plantillas PDF de factura y receta
-│   └── utils.ts       Utilidades (cn, formato)
-├── middleware.ts      Auth + headers de seguridad + rate limit
-├── pages/
-│   ├── api/           Endpoints REST (ver §5)
-│   └── *.astro        Páginas SSR (dashboard, pacientes, citas…)
-└── styles/global.css  Tailwind + variables de tema (incluye modo oscuro)
-```
+El service worker almacena exclusivamente la página pública `/sin-conexion` y sus recursos estáticos. No almacena HTML de páginas autenticadas ni respuestas de API. Sin señal, una navegación abre la página pública y esta lee la copia local del usuario activo.
 
----
+- **Borrador:** autoguardado local después de escribir y guardado inmediato al regresar a la jornada desde la vista offline. “Guardar borrador” permite seguir trabajando sin señal.
+- **Pendiente:** una atención cerrada localmente espera confirmación. El inicio y el cierre pueden quedar en cola en ese orden.
+- **Sincronizado:** el servidor confirma la operación y la copia local se actualiza antes de retirar el pendiente.
+- **Revisión requerida:** un conflicto de versión, stock, permiso o saldo conserva los datos. Revisar la versión actual, corregir y guardar de nuevo.
 
-## 3. Roles y permisos
+Cada operación utiliza un UUID estable, un hash de sus datos y una transacción de base de datos. Reenviar la misma operación devuelve su resultado original. Un inicio anterior puede ser referenciado por el cierre: la versión se toma de su comprobante confirmado. Cambios posteriores realizados desde otro dispositivo producen conflicto, no sobrescritura silenciosa.
 
-Cuatro roles definidos en `src/lib/permissions.ts`:
+La transacción cubre nota clínica, fotos, consumo de stock, cobro, pago y estado. Los cobros tradicionales también bloquean la misma cita/factura para evitar carreras con el nuevo espacio de atención.
 
-| Recurso | admin | veterinario | recepcionista | cliente |
-|---|---|---|---|---|
-| Pacientes / Tutores | ✅ | ✅ | ✅ (escr.) | ❌ |
-| Historial médico | ✅ | ✅ | ❌ | ❌ |
-| Recetas | ✅ | ✅ | ❌ | solo propias |
-| Laboratorio | ✅ | ✅ | ❌ | ❌ |
-| Citas | ✅ | ✅ | ✅ | solo propias |
-| Inventario | ✅ | lectura | lectura | ❌ |
-| Facturación | ✅ | ❌ | ✅ | solo propias |
-| Usuarios | ✅ | ❌ | ❌ | ❌ |
+**Límites deliberados:** la copia es de la jornada preparada, no de toda la base. Una jornada antigua se identifica como tal. Hace falta abrir la aplicación para sincronizar; no se promete sincronización con el navegador cerrado. Una sesión vencida exige volver a iniciar con la misma cuenta. Los controles nuevos, documentos PDF del servidor y proveedores de pago requieren señal. Un pago registrado offline no ejecuta un cobro bancario: registra dinero ya recibido.
 
-El `cliente` accede a un portal (`/api/client/portal`) que solo expone sus propios datos.
+## Métricas operativas
 
----
+Hoy muestra visitas por atender/completadas, saldo de los cobros de esas visitas y promedio entre `started_at` y `completed_at`. Las atenciones anteriores a esta versión sin esos tiempos no intervienen en el promedio. Un inicio/cierre capturado sin conexión se fecha al confirmarse en servidor; no debe interpretarse como cronometraje exacto del trabajo offline.
 
-## 4. Modelo de datos
+## Componentes y endpoints
 
-Esquemas en `src/db/schema/` (Drizzle, dialecto PostgreSQL):
+- `src/components/visits/`: jornada, espacio de atención, resumen y shell offline.
+- `src/lib/visits.ts`: lectura de jornada/ficha limitada por rol y veterinario.
+- `src/lib/save-visit.ts`: transacción clínica/stock/cobro y comprobante de idempotencia.
+- `src/lib/field-storage.ts`: almacenamiento local, cola y sincronización.
+- `src/lib/clinic-time.ts`: horario local con cambios estacionales.
+- `GET /api/jornada`: jornada del día.
+- `GET /api/visits/:id`: contexto de visita para el usuario autorizado.
+- `POST /api/visits/:id/sync`: operación validada; exige que `X-Field-User` coincida con la sesión.
+- Los endpoints existentes de pacientes, responsables, citas, inventario, documentos y pagos siguen operativos.
 
-- **users.ts** — `users`, `sessions`, `accounts`, `verifications` (tablas de Better Auth). `users.role` es enum: `admin | veterinario | recepcionista | cliente`.
-- **patients.ts** — `owners` (tutores), `patients` (mascotas). Enums `species`, `sex`.
-- **appointments.ts** — `appointments`, `veterinarian_schedules`. Enums `type`, `status`.
-- **medical.ts** — `medical_records` (con `vital_signs` en JSON), `vaccines`.
-- **prescriptions.ts** — `prescriptions`, `prescription_items`, `lab_orders`.
-- **inventory.ts** — `products`, `stock_movements`. Enum `category`, `movement_type`.
-- **billing.ts** — `invoices`, `invoice_items`, `payments`. Enums `invoice_status`, `payment_method`.
+## Instalación y despliegue
 
-Relaciones clave: `patients → owners`; `appointments/medical_records/prescriptions/lab_orders → patients + users(veterinario)`; `invoices → owners + users(createdBy)`; `invoice_items → products`.
+Configurar conexión PostgreSQL (`DATABASE_URL`; pooler con `prepare:false`), conexión directa para migración (`DIRECT_URL`), autenticación (`BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`). Mercado Pago y Sentry son integraciones opcionales según sus variables de entorno.
 
----
+Respaldar y aplicar `docs/migrations/2026-09-16-operacion-domicilio.sql` antes de desplegar. Añade `started_at`, `completed_at`, `no_charge`, `visit_operations` e índices por cita. No es necesario borrar datos ni recrear usuarios para este cambio. El cierre antiguo de cuentas de tutores tiene su propia migración y no se ejecuta automáticamente.
 
-## 5. API (endpoints REST)
+## Verificación manual en una base de prueba
 
-Todos bajo `/api/`, protegidos por el middleware (sesión obligatoria salvo `/api/auth`).
+1. Crear paciente y responsable sin correo; crear cita desde su ficha y verificar dirección, paciente y profesional.
+2. Editar cita existente; verificar valores iniciales y rechazo de solapamientos.
+3. Entrar como veterinario y comprobar que Hoy/Agenda muestran sus visitas; comprobar recepción y administración por separado.
+4. Preparar jornada; desactivar red, recargar la URL de una visita, iniciar atención, escribir nota/fotos/insumos y regresar inmediatamente. Comprobar recuperación del borrador.
+5. Completar atención con cobro o sin costo; imprimir resumen marcado como pendiente. Restaurar señal y comprobar una sola nota, consumo y pago aun reenviando la operación.
+6. Repetir con falta de stock, saldo cambiado o cita editada desde otro dispositivo. Debe conservarse el borrador y mostrarse la revisión requerida.
+7. Abrir una segunda pestaña; cerrar sesión en la primera. La jornada anterior debe dejar de mostrarse y no volver a activar la cuenta vieja.
+8. Comprobar descarga de receta/laboratorio/consentimiento y control preseleccionado con conexión.
 
-| Recurso | Rutas |
-|---|---|
-| Auth | `/api/auth/[...all]` (Better Auth) |
-| Pacientes | `/api/patients`, `/api/patients/[id]` |
-| Tutores | `/api/owners`, `/api/owners/[id]` |
-| Citas | `/api/appointments`, `/api/appointments/[id]` |
-| Historial | `/api/medical`, `/api/medical/[id]`, `/api/medical/vaccines` |
-| Vacunas | `/api/vaccines`, `/api/vaccines/[id]`, `/api/vaccines/upcoming` |
-| Recetas | `/api/prescriptions`, `/api/prescriptions/[id]`, `.../pdf` |
-| Laboratorio | `/api/lab-orders`, `/api/lab-orders/[id]` |
-| Inventario | `/api/inventory`, `/api/inventory/[id]`, `/api/inventory/stock` |
-| Facturación | `/api/invoices`, `/api/invoices/[id]`, `.../pdf`, `/api/invoices/payment` |
-| Reportes | `/api/reports`, `/api/dashboard/stats` |
-| Usuarios | `/api/users`, `/api/users/[id]` (solo admin) |
-| Horarios | `/api/schedules`, `/api/schedules/[id]` |
-| Portal cliente | `/api/client/portal` |
-
-Convenciones: `GET` lista/lee, `POST` crea (valida con Zod), `PUT` actualiza (valida con Zod), `DELETE` elimina con reglas de integridad (p.ej. no se borran registros médicos).
-
----
-
-## 6. Seguridad (resumen)
-
-Detalle completo en [SECURITY.md](SECURITY.md).
-
-1. **Autenticación** — Better Auth, cookies `HttpOnly`/`SameSite`, verificación en middleware.
-2. **Autorización** — chequeo de rol en cada endpoint; el `cliente` solo ve lo propio.
-3. **Validación** — Zod en todos los `POST`/`PUT`.
-4. **SQL** — Drizzle parametriza; sin concatenación de strings.
-5. **Rate limiting** — login 10/min, escrituras 60/min por IP.
-6. **Headers HTTP** — CSP, HSTS, X-Frame-Options, etc.
-
----
-
-## 7. Despliegue (Vercel + Supabase)
-
-### Variables de entorno (en Vercel)
-
-| Variable | Descripción |
-|---|---|
-| `DATABASE_URL` | Cadena del **pooler de transacciones** de Supabase (puerto 6543, `?pgbouncer=true`). Usada por la app en runtime. |
-| `DIRECT_URL` | Cadena **directa/sesión** de Supabase (puerto 5432). Usada por `drizzle-kit` para migraciones. |
-| `BETTER_AUTH_SECRET` | Secreto aleatorio ≥ 32 chars (`openssl rand -base64 32`). |
-| `BETTER_AUTH_URL` | URL pública HTTPS del despliegue (sin barra final). |
-
-### Notas técnicas (verificadas con Context7)
-
-- **Drizzle + Supabase serverless**: el cliente usa `postgres-js` con `{ prepare: false }`,
-  obligatorio en el modo *Transaction* del pooler (puerto 6543).
-- **Migraciones**: `drizzle-kit` usa `DIRECT_URL` (puerto 5432), porque las migraciones
-  no funcionan a través del pooler de transacciones.
-- **Adaptador**: `@astrojs/vercel` con `output: 'server'`.
-
-### Pasos
-
-```bash
-# 1. Generar el esquema en la base de Supabase
-npm run db:push          # usa DIRECT_URL
-
-# 2. Cargar datos demo + contraseñas (opcional)
-npm run db:seed
-npx tsx src/db/set-passwords.ts   # contraseña por defecto: Vet2026!
-
-# 3. Desplegar (Vercel detecta Astro automáticamente)
-#    Configurar las variables de entorno en el panel de Vercel.
-```
-
-### Cuentas de prueba (tras seed + set-passwords)
-
-| Rol | Email | Contraseña |
-|---|---|---|
-| Admin | admin@vetclinic.com | Vet2026! |
-| Veterinario | veterinario@vetclinic.com | Vet2026! |
-| Recepcionista | recepcion@vetclinic.com | Vet2026! |
-| Cliente | cliente@vetclinic.com | Vet2026! |
-
-> ⚠️ Cambiar estas contraseñas antes de un uso real en producción.
-
----
-
-## 8. Comandos
-
-| Comando | Acción |
-|---|---|
-| `npm run dev` | Servidor de desarrollo (`localhost:4321`) |
-| `npm run build` | Build de producción |
-| `npm run db:generate` | Genera migraciones SQL desde el esquema |
-| `npm run db:push` | Aplica el esquema a la base de datos |
-| `npm run db:studio` | Explorador de la base de datos |
-| `npm run db:seed` | Carga datos de demostración |
-| `npm run db:clean` | Vacía las tablas |
-| `npm run test` | Ejecuta la suite de tests (Vitest) |
+Las pruebas automatizadas cubren contratos, permisos, horario, cola, idempotencia y transacciones simuladas. La prueba de navegador con fixtures verifica la interfaz móvil y service worker; no sustituye probar la migración y los efectos transaccionales contra PostgreSQL de staging.

@@ -138,7 +138,7 @@ export function ReportsCharts() {
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis dataKey="mes" tick={{ fontSize: 12 }} />
               <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
-              <Tooltip formatter={(v: number) => fmt(v)} labelFormatter={(l) => `Mes: ${l}`} />
+              <Tooltip formatter={(v) => fmt(Number(v ?? 0))} labelFormatter={(l) => `Mes: ${l}`} />
               <Bar dataKey="total" fill="#2563eb" radius={[4, 4, 0, 0]} name="Ingresos" />
             </BarChart>
           </ResponsiveContainer>
@@ -154,7 +154,7 @@ export function ReportsCharts() {
           ) : (
             <ResponsiveContainer width="100%" height={220}>
               <PieChart>
-                <Pie data={apptTypeFormatted} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                <Pie data={apptTypeFormatted} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`} labelLine={false}>
                   {apptTypeFormatted.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                 </Pie>
                 <Tooltip />

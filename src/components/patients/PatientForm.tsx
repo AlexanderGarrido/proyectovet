@@ -1,3 +1,6 @@
+import type { z } from 'zod';
+import { OwnerForm } from './OwnerForm';
+import { fetchFormData, fetchFormChoices } from '../../lib/form-context';
 import { useState, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -30,28 +33,39 @@ async function compressImage(file: File): Promise<string> {
 }
 
 export function PatientForm({ patientId, defaultOwnerId }: Props) {
+  const [ownerEditor, setOwnerEditor] = useState<number | null | undefined>(undefined);
   const [owners, setOwners] = useState<Owner[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [photo, setPhoto] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<PatientFormData>({
+  const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<z.input<typeof patientFormSchema>, unknown, PatientFormData>({
     resolver: zodResolver(patientFormSchema),
     defaultValues: { ownerId: defaultOwnerId?.toString() || '', species: 'perro', sex: 'macho' },
   });
 
   useEffect(() => {
-    fetch('/api/owners').then((r) => r.json()).then(setOwners);
-    if (patientId) {
-      fetch(`/api/patients/${patientId}`)
-        .then((r) => r.json())
-        .then((data) => {
-          reset({ ...data, ownerId: String(data.ownerId), weight: data.weight?.toString() || '' });
-          if (data.photo) setPhoto(data.photo);
-        });
+    let cancelled = false;
+    async function load() {
+      try {
+        const data = patientId
+          ? await fetchFormData<PatientFormData & { photo?: string }>(`/api/patients/${patientId}`)
+          : undefined;
+        const choices = await fetchFormChoices<Owner>('/api/owners', data ? Number(data.ownerId) : defaultOwnerId);
+        if (cancelled) return;
+        setOwners(choices);
+        if (data) {
+          reset({ ...data, ownerId: String(data.ownerId), weight: data.weight?.toString() || '', breed: data.breed || '', color: data.color || '', dateOfBirth: data.dateOfBirth || '', microchipNumber: data.microchipNumber || '', notes: data.notes || '' });
+          setPhoto(data.photo || null);
+        }
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'No se pudo cargar el paciente');
+      }
     }
-  }, [patientId]);
+    void load();
+    return () => { cancelled = true; };
+  }, [patientId, defaultOwnerId, reset]);
 
   async function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -65,6 +79,7 @@ export function PatientForm({ patientId, defaultOwnerId }: Props) {
     setError('');
     const url = patientId ? `/api/patients/${patientId}` : '/api/patients';
     const method = patientId ? 'PUT' : 'POST';
+    try {
     const res = await fetch(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
@@ -74,9 +89,20 @@ export function PatientForm({ patientId, defaultOwnerId }: Props) {
     if (!res.ok) { setError(json.error || 'Error al guardar'); toast.error(json.error || 'Error al guardar'); setLoading(false); return; }
     toast.success(patientId ? 'Paciente actualizado correctamente' : 'Paciente registrado correctamente');
     setTimeout(() => { window.location.href = `/pacientes/${json.id}`; }, 500);
+    } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo guardar. Reintenta.'); }
+    finally { setLoading(false); }
   }
 
   return (
+    <>
+    {ownerEditor !== undefined && <section className="border rounded-xl p-4 mb-5" aria-label="Responsable del paciente">
+      <h3 className="font-semibold mb-3">{ownerEditor ? 'Editar responsable' : 'Nuevo responsable'}</h3>
+      <OwnerForm key={ownerEditor || 'new'} ownerId={ownerEditor || undefined}
+        onCancel={() => setOwnerEditor(undefined)} onSaved={(owner) => {
+          setOwners((current) => [...current.filter((o) => o.id !== owner.id), owner]);
+          setValue('ownerId', String(owner.id)); setOwnerEditor(undefined);
+        }} />
+    </section>}
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-5 max-w-2xl">
       {error && <div className="p-3 bg-red-50 text-red-600 rounded-lg text-sm">{error}</div>}
 
@@ -132,7 +158,10 @@ export function PatientForm({ patientId, defaultOwnerId }: Props) {
           </select>
           {errors.ownerId && <p className="text-red-500 text-xs mt-1">{errors.ownerId.message}</p>}
           <p className="text-xs text-muted-foreground mt-1">Los tutores con “✓ con cuenta” pueden ver esta mascota en su portal.</p>
-          <a href="/pacientes/nuevo-dueno" className="text-xs text-primary hover:underline mt-1 inline-block">+ Registrar nuevo tutor</a>
+          <div className="flex flex-wrap gap-3 mt-2">
+            <button type="button" onClick={() => setOwnerEditor(null)} className="text-sm text-primary py-2">+ Nuevo responsable</button>
+            {watch('ownerId') && <button type="button" onClick={() => setOwnerEditor(Number(watch('ownerId')))} className="text-sm text-primary py-2">Editar responsable</button>}
+          </div>
         </div>
 
         <div>
@@ -202,5 +231,6 @@ export function PatientForm({ patientId, defaultOwnerId }: Props) {
         </a>
       </div>
     </form>
+    </>
   );
 }

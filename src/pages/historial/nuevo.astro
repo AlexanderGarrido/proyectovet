@@ -19,6 +19,7 @@ const appointmentId = Astro.url.searchParams.get('appointmentId');
   <div class="max-w-3xl rounded-xl border bg-card p-6">
     <MedicalRecordForm
       client:load
+      userId={user.id}
       patientId={patientId ? Number(patientId) : undefined}
       appointmentId={appointmentId ? Number(appointmentId) : undefined}
     />

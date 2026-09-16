@@ -4,8 +4,8 @@ import { prescriptions, prescriptionItems } from '../../../../db/schema/prescrip
 import { patients, owners } from '../../../../db/schema/patients';
 import { users } from '../../../../db/schema/users';
 import { eq } from 'drizzle-orm';
-import { renderToStream } from '@react-pdf/renderer';
-import { createElement } from 'react';
+import { renderToBuffer, type DocumentProps } from '@react-pdf/renderer';
+import { createElement, type ReactElement } from 'react';
 import { PrescriptionPDF } from '../../../../lib/pdf/prescription-template';
 import { requireUnscopedPermission } from '../../../../lib/guard';
 
@@ -34,20 +34,14 @@ export const GET: APIRoute = async ({ params, locals }) => {
 
   const items = await db.select().from(prescriptionItems).where(eq(prescriptionItems.prescriptionId, id));
 
-  const stream = await renderToStream(
+  const buffer = await renderToBuffer(
     createElement(PrescriptionPDF, {
       prescription: { ...rx, date: rx.date.toISOString() },
       items,
-    })
+    }) as ReactElement<DocumentProps>
   );
 
-  const chunks: Buffer[] = [];
-  for await (const chunk of stream as any) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-  }
-  const buffer = Buffer.concat(chunks);
-
-  return new Response(buffer, {
+  return new Response(new Uint8Array(buffer), {
     headers: {
       'Content-Type': 'application/pdf',
       'Content-Disposition': `inline; filename="receta-${id}.pdf"`,

@@ -1,17 +1,19 @@
 ---
+import { readFormContext } from '../../lib/form-context';
 import DashboardLayout from '../../layouts/DashboardLayout.astro';
 import { AppointmentForm } from '../../components/appointments/AppointmentForm';
 
+const context = readFormContext(Astro.url.searchParams);
 const user = Astro.locals.user;
 if (!user) return Astro.redirect('/login');
 ---
 
 <DashboardLayout title="Nueva Cita" pageTitle="Programar Cita">
   <div class="mb-6">
-    <a href="/citas" class="text-sm text-muted-foreground hover:text-foreground transition-colors">← Volver a Citas</a>
+    <a href={context.returnTo || "/citas"} class="text-sm text-muted-foreground hover:text-foreground transition-colors">← Volver a Citas</a>
   </div>
   <div class="max-w-2xl rounded-xl border bg-card p-6">
     <h2 class="text-lg font-semibold mb-6">Datos de la Cita</h2>
-    <AppointmentForm client:load />
+    <AppointmentForm client:load patientId={context.patientId} returnTo={context.returnTo} followup={Astro.url.searchParams.has('followup')} />
   </div>
 </DashboardLayout>

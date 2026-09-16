@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Menu, Moon, Sun, PanelLeft, Search, LogOut, PawPrint, Users, Loader2 } from 'lucide-react';
 import { OnlineStatus } from '../common/OnlineStatus';
 import { signOut } from '../../lib/auth-client';
+import { clearFieldData, currentFieldUser, listPending } from '../../lib/field-storage';
 import { cn } from '../../lib/utils';
 
 interface HeaderProps {
@@ -40,6 +41,12 @@ export function Header({ title, userName, userRole, onMenuToggle, onSidebarColla
   }
 
   async function handleLogout() {
+    const userId = currentFieldUser();
+    if (userId) {
+      const pending = await listPending(userId);
+      if (pending.length && !window.confirm(`Hay ${pending.length} guardado(s) sin sincronizar. Cerrar sesión borrará los datos locales. ¿Quieres descartarlos y salir?`)) return;
+      await clearFieldData(userId);
+    }
     await signOut();
     window.location.href = '/login';
   }

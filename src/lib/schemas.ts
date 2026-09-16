@@ -4,7 +4,7 @@ import { z } from 'zod';
 export const ownerSchema = z.object({
   firstName:  z.string().min(1, 'Nombre requerido').max(100),
   lastName:   z.string().min(1, 'Apellido requerido').max(100),
-  email:      z.string().email('Email inválido').max(200),
+  email:      z.string().email('Email inválido').max(200).or(z.literal('')).optional().nullable(),
   phone:      z.string().max(20).optional().nullable(),
   address:    z.string().max(300).optional().nullable(),
   documentId: z.string().max(50).optional().nullable(),
@@ -19,7 +19,9 @@ export const patientSchema = z.object({
   species:         z.enum(['perro', 'gato', 'ave', 'conejo', 'reptil', 'roedor', 'otro']),
   breed:           z.string().max(100).optional().nullable(),
   color:           z.string().max(50).optional().nullable(),
-  sex:             z.enum(['macho', 'hembra', 'desconocido']).optional().nullable(),
+  sex:             z.enum(['macho', 'hembra', 'desconocido']).nullish().transform(v => v ?? 'desconocido'),
+  notes:           z.string().max(2000).optional().nullable(),
+  isActive:        z.boolean().optional(),
   dateOfBirth:     z.string().optional().nullable(),
   weight:          z.coerce.number().positive().optional().nullable(),
   microchipNumber: z.string().max(50).optional().nullable(),
@@ -33,8 +35,8 @@ export const appointmentSchema = z.object({
   patientId:       z.number().int().positive('Paciente requerido'),
   ownerId:         z.number().int().positive('Tutor requerido'),
   veterinarianId:  z.string().min(1, 'Veterinario requerido'),
-  scheduledAt:     z.string().min(1, 'Fecha requerida'),
-  endAt:           z.string().min(1, 'Hora de fin requerida'),
+  scheduledAt:     z.string().datetime({ offset: true, message: 'Fecha inválida: incluye zona horaria' }),
+  endAt:           z.string().datetime({ offset: true, message: 'Fecha inválida: incluye zona horaria' }),
   type:            z.enum(['consulta', 'vacunacion', 'cirugia', 'control', 'emergencia', 'desparasitacion', 'grooming']),
   reason:          z.string().max(500).optional().nullable(),
   notes:           z.string().max(1000).optional().nullable(),
@@ -236,8 +238,8 @@ export const ownerUpdateSchema = ownerSchema.partial();
 export type OwnerUpdateInput = z.infer<typeof ownerUpdateSchema>;
 
 export const appointmentUpdateSchema = z.object({
-  scheduledAt:   z.string().optional(),
-  endAt:         z.string().optional(),
+  scheduledAt:   z.string().datetime({ offset: true }).optional(),
+  endAt:         z.string().datetime({ offset: true }).optional(),
   type:          z.enum(['consulta', 'vacunacion', 'cirugia', 'control', 'emergencia', 'desparasitacion', 'grooming']).optional(),
   status:        z.enum(['programada', 'confirmada', 'en_camino', 'en_curso', 'completada', 'cancelada', 'no_asistio']).optional(),
   reason:        z.string().max(500).optional().nullable(),

@@ -1,71 +1,44 @@
-# 🐾 Alma Veterinaria
+# Alma Veterinaria
 
-Sistema de gestión para clínica veterinaria: pacientes, citas, historial médico,
-recetas, laboratorio, inventario y facturación, con autenticación por roles.
+Aplicación operativa para veterinarios a domicilio. La visita reúne antecedentes, nota clínica, fotos, insumos, cobro y resumen para el responsable. El menú principal es **Hoy · Agenda · Pacientes · Botiquín · Cobros**.
 
-**Stack:** Astro 6 (SSR) · React 19 · Tailwind 4 · Drizzle ORM · Better Auth · PostgreSQL (Supabase) · Vercel.
+Los responsables se gestionan dentro de Pacientes. No existe registro público ni portal de tutores. Las fichas `owners` se conservan para contactos, domicilios y cobros.
 
-> 📚 Documentación completa del sistema en [DOCUMENTACION.md](DOCUMENTACION.md).
-> 🔒 Modelo de seguridad en [SECURITY.md](SECURITY.md).
+**Stack:** Astro 6 SSR, React 19, Tailwind 4, Drizzle, Better Auth, PostgreSQL/Supabase y Vercel.
 
----
-
-## Desarrollo local
+## Desarrollo
 
 ```sh
 npm install
-cp .env.example .env      # y completa los valores (ver abajo)
-npm run db:push           # crea el esquema en la base
-npm run db:seed           # datos de demostración (opcional)
-npx tsx src/db/set-passwords.ts   # contraseñas demo (Vet2026!)
-npm run dev               # http://localhost:4321
+cp .env.example .env
+npm run dev
 ```
 
-### Variables de entorno
+Configurar `DATABASE_URL`, `DIRECT_URL`, `BETTER_AUTH_SECRET` y `BETTER_AUTH_URL`. Usar una base de desarrollo separada. `db:seed` y `db:clean` modifican datos; no son parte de los comandos de verificación.
 
-| Variable | Descripción |
-|---|---|
-| `DATABASE_URL` | Pooler de transacciones de Supabase (puerto 6543, `?pgbouncer=true`). |
-| `DIRECT_URL` | Conexión directa de Supabase (puerto 5432), para migraciones. |
-| `BETTER_AUTH_SECRET` | Secreto aleatorio ≥ 32 chars (`openssl rand -base64 32`). |
-| `BETTER_AUTH_URL` | URL pública HTTPS (sin barra final). |
-| `SMTP_*` | (Opcional) correo para recordatorios. |
+## Actualizar una instalación existente
 
----
+Antes de desplegar este cambio, aplicar con conexión directa y respaldo previo:
 
-## Comandos
+- [Migración de operación a domicilio](docs/migrations/2026-09-16-operacion-domicilio.sql): tiempos de atención, marca de atención sin costo y comprobantes de operaciones idempotentes.
+- [Migración anterior de cierre del portal](docs/migrations/2026-09-01-cierre-portal-tutores.sql), solo si sigue pendiente. Esta migración anterior elimina cuentas de tutores; revisar sus instrucciones y datos antes de ejecutarla.
 
-| Comando | Acción |
-|---|---|
-| `npm run dev` | Servidor de desarrollo |
-| `npm run build` | Build de producción |
-| `npm run db:push` | Aplica el esquema a la base |
-| `npm run db:generate` | Genera migraciones SQL |
-| `npm run db:studio` | Explorador de la base |
-| `npm run db:seed` | Datos de demostración |
-| `npm run db:clean` | Vacía las tablas |
-| `npm run test` | Tests (Vitest) |
+La migración nueva es aditiva; no elimina responsables, pacientes ni historiales. El código nuevo requiere esas columnas/tablas antes de iniciar. No se aplican migraciones automáticamente durante build.
 
----
+## Trabajo en terreno
 
-## Despliegue (Vercel + Supabase)
+En **Hoy**, seleccionar **Preparar sin conexión** mientras hay señal. En el mismo dispositivo se podrá abrir la jornada, iniciar una visita, redactar su atención y dejarla pendiente para sincronizar. El resumen local se puede imprimir/guardar como PDF; mientras está pendiente lleva una marca de borrador.
 
-1. Crear proyecto en [Supabase](https://supabase.com) (PostgreSQL).
-2. Configurar `DATABASE_URL` y `DIRECT_URL` y ejecutar `npm run db:push`.
-3. Importar el repo en [Vercel](https://vercel.com) (detecta Astro automáticamente).
-4. Añadir las variables de entorno en Vercel y desplegar.
+La sincronización se realiza con la aplicación abierta al recuperar conexión o al pulsar **Sincronizar**. Un conflicto de stock/datos conserva el borrador y requiere revisión. Cerrar sesión borra los datos locales de la cuenta; la interfaz advierte si hay operaciones pendientes.
 
-Detalle paso a paso en [DOCUMENTACION.md §7](DOCUMENTACION.md#7-despliegue-vercel--supabase).
+Los documentos de servidor, enlaces de pago y programación de controles requieren conexión. El modo sin conexión se verifica sobre una compilación de producción servida por HTTPS o localhost.
 
----
+## Verificación
 
-## Cuentas de prueba (tras seed)
+```sh
+npm test
+npx astro check
+npm run build
+```
 
-| Rol | Email | Contraseña |
-|---|---|---|
-| Admin | admin@vetclinic.com | Vet2026! |
-| Veterinario | veterinario@vetclinic.com | Vet2026! |
-| Recepcionista | recepcion@vetclinic.com | Vet2026! |
-| Cliente | cliente@vetclinic.com | Vet2026! |
-
-> ⚠️ Cambiar estas contraseñas antes de un uso real.
+Los tests usan mocks y almacenamiento IndexedDB de prueba, sin escribir a una base real. Detalle de operación y prueba manual en [DOCUMENTACION.md](DOCUMENTACION.md). Modelo de permisos y sincronización en [SECURITY.md](SECURITY.md).

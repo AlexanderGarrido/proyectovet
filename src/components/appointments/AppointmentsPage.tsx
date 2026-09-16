@@ -2,16 +2,12 @@ import { useState } from 'react';
 import { List, CalendarDays } from 'lucide-react';
 import { AppointmentList } from './AppointmentList';
 import { AppointmentCalendar } from './AppointmentCalendar';
-import { WhatsappCta } from '../common/WhatsappCta';
 
 export function AppointmentsPage() {
   const [view, setView] = useState<'list' | 'calendar'>('list');
 
   return (
     <div className="space-y-4">
-      {/* Agendamiento por WhatsApp (único canal) */}
-      <WhatsappCta />
-
       {/* View toggle */}
       <div className="flex items-center gap-1 p-1 bg-muted rounded-lg w-fit">
         <button

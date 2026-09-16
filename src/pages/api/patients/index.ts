@@ -42,6 +42,7 @@ export const GET: APIRoute = async ({ request, locals }) => {
         ownerFirstName: owners.firstName,
         ownerLastName: owners.lastName,
         ownerPhone: owners.phone,
+        ownerAddress: owners.address,
         hasPhoto: sql<boolean>`${patients.photo} IS NOT NULL`,
         updatedAt: patients.updatedAt,
       })
@@ -66,10 +67,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const parsed = patientSchema.safeParse(body);
   if (!parsed.success) return zodError(parsed.error);
 
-  const { ownerId, name, species, breed, color, sex, dateOfBirth, weight, microchipNumber, photo } = parsed.data;
+  const { ownerId, name, species, breed, color, sex, notes, isActive, dateOfBirth, weight, microchipNumber, photo } = parsed.data;
 
   const [newPatient] = await db.insert(patients).values({
-    ownerId, name, species, breed, color, sex,
+    ownerId, name, species, breed, color, sex, notes, isActive,
     dateOfBirth: dateOfBirth || null,
     weight: weight != null ? String(weight) : null,
     microchipNumber,

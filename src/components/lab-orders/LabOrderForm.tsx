@@ -1,3 +1,4 @@
+import { fetchFormChoices, safeVisitReturn } from '../../lib/form-context';
 import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { FlaskConical } from 'lucide-react';
@@ -15,34 +16,37 @@ interface FormData {
   description: string;
 }
 
-export function LabOrderForm() {
+export function LabOrderForm({ patientId, medicalRecordId, returnTo }: { patientId?: number; medicalRecordId?: number; returnTo?: string }) {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  const { register, handleSubmit, formState: { errors } } = useForm<FormData>();
+  const { register, handleSubmit, formState: { errors } } = useForm<FormData>({ defaultValues: { patientId: patientId?.toString() || '' } });
 
   useEffect(() => {
-    fetch('/api/patients').then((r) => r.json()).then(setPatients);
+    fetchFormChoices<Patient>('/api/patients', patientId).then(setPatients).catch((e) => setError(e.message));
   }, []);
 
   async function onSubmit(data: FormData) {
     setSaving(true);
     setError('');
+    try {
     const res = await fetch('/api/lab-orders', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...data, patientId: Number(data.patientId) }),
+      body: JSON.stringify({ ...data, patientId: Number(data.patientId), medicalRecordId: Number(data.patientId) === patientId ? medicalRecordId : undefined }),
     });
     if (res.ok) {
       toast.success('Orden de examen creada correctamente');
-      setTimeout(() => { window.location.href = '/ordenes'; }, 500);
+      setTimeout(() => { window.location.href = safeVisitReturn(returnTo) || '/ordenes'; }, 500);
     } else {
       const json = await res.json();
       toast.error(json.error || 'Error al crear la orden');
       setError(json.error || 'Error al crear la orden');
     }
     setSaving(false);
+    } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo guardar. Reintenta.'); }
+    finally { setSaving(false); }
   }
 
   return (
@@ -96,7 +100,7 @@ export function LabOrderForm() {
 
       <div className="flex gap-3">
         <a
-          href="/ordenes"
+          href={safeVisitReturn(returnTo) || "/ordenes"}
           className="flex-1 text-center px-4 py-2 border rounded-lg text-sm hover:bg-muted transition-colors"
         >
           Cancelar

@@ -3,8 +3,8 @@ import { db } from '../../../db';
 import { appointments } from '../../../db/schema/appointments';
 import { patients, owners } from '../../../db/schema/patients';
 import { users } from '../../../db/schema/users';
-import { eq, gte, lte, and, desc, sql } from 'drizzle-orm';
-import { appointmentSchema, zodError } from '../../../lib/schemas';
+import { eq, gte, lte, and, desc, sql, lt, gt, notInArray } from 'drizzle-orm';
+import { appointmentSchema, zodError, parseJsonBody } from '../../../lib/schemas';
 import { requirePermission } from '../../../lib/guard';
 import { jsonError, jsonOk, jsonOkPaginated } from '../../../lib/http';
 
@@ -22,6 +22,8 @@ export const GET: APIRoute = async ({ request, locals }) => {
   const offset = (page - 1) * limit;
 
   const conditions = [];
+  if (user!.role === 'veterinario') conditions.push(eq(appointments.veterinarianId, user!.id));
+  if ((from && !Number.isFinite(Date.parse(from))) || (to && !Number.isFinite(Date.parse(to)))) return jsonError(400, 'Fecha inválida');
   if (from) conditions.push(gte(appointments.scheduledAt, new Date(from)));
   if (to) conditions.push(lte(appointments.scheduledAt, new Date(to)));
   const VALID_STATUSES = ['programada', 'confirmada', 'en_camino', 'en_curso', 'completada', 'cancelada', 'no_asistio'] as const;
@@ -45,6 +47,7 @@ export const GET: APIRoute = async ({ request, locals }) => {
         status: appointments.status,
         reason: appointments.reason,
         notes: appointments.notes,
+        visitAddress: appointments.visitAddress,
         patientId: appointments.patientId,
         patientName: patients.name,
         patientSpecies: patients.species,
@@ -74,22 +77,31 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const guardErr = requirePermission(user, 'appointments', 'write');
   if (guardErr) return guardErr;
 
-  const body = await request.json();
-  const parsed = appointmentSchema.safeParse(body);
+  const body = await parseJsonBody(request);
+  if ('error' in body) return body.error;
+  const parsed = appointmentSchema.safeParse(body.data);
   if (!parsed.success) return zodError(parsed.error);
 
   const { patientId, ownerId, veterinarianId, scheduledAt, endAt, type, reason, notes, visitAddress } = parsed.data;
 
-  const [newAppt] = await db.insert(appointments).values({
-    patientId,
-    ownerId,
-    veterinarianId,
-    scheduledAt: new Date(scheduledAt),
-    endAt: new Date(endAt),
-    type,
-    reason,
-    notes,
-    visitAddress: visitAddress || null,
-  }).returning();
-  return jsonOk(newAppt, 201);
+  return db.transaction(async (tx) => {
+    // Serialize schedule writers across creation and rescheduling.
+    await tx.execute(sql`select pg_advisory_xact_lock(764210)`);
+    const [patient] = await tx.select().from(patients).where(eq(patients.id, patientId));
+    if (!patient || patient.ownerId !== ownerId) return jsonError(400, 'El paciente no pertenece al tutor seleccionado');
+    const [vet] = await tx.select().from(users).where(eq(users.id, veterinarianId));
+    if (!vet || !vet.isActive || vet.role !== 'veterinario') return jsonError(400, 'Veterinario inválido');
+    if (user!.role === 'veterinario' && user!.id !== veterinarianId) return jsonError(403, 'Solo puedes programar tu propia agenda');
+    const [overlap] = await tx.select({ id: appointments.id }).from(appointments).where(and(
+      eq(appointments.veterinarianId, veterinarianId),
+      notInArray(appointments.status, ['cancelada', 'no_asistio']),
+      lt(appointments.scheduledAt, new Date(endAt)), gt(appointments.endAt, new Date(scheduledAt)),
+    ));
+    if (overlap) return jsonError(409, 'El veterinario ya tiene una cita en ese horario');
+    const [newAppt] = await tx.insert(appointments).values({
+      patientId, ownerId, veterinarianId, scheduledAt: new Date(scheduledAt), endAt: new Date(endAt),
+      type, reason, notes, visitAddress: visitAddress || null,
+    }).returning();
+    return jsonOk(newAppt, 201);
+  });
 };

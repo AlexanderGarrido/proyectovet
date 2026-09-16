@@ -6,7 +6,7 @@ import { jsonError } from './lib/http';
 // '/api/cron' se autentica por su cuenta con CRON_SECRET (Bearer), no por sesión.
 // '/api/payments/webhook' se autentica con la firma HMAC de Mercado Pago
 // (x-signature) — MP lo llama server-to-server, sin nuestra cookie de sesión.
-const publicRoutes = ['/', '/login', '/api/auth', '/api/cron', '/api/payments/webhook'];
+const publicRoutes = ['/', '/login', '/sin-conexion', '/api/auth', '/api/cron', '/api/payments/webhook'];
 
 function isPublicRoute(pathname: string): boolean {
   return publicRoutes.some(
@@ -42,6 +42,8 @@ function addSecurityHeaders(response: Response): Response {
 
 export const onRequest = defineMiddleware(async (context, next) => {
   const { pathname } = context.url;
+  // The prerendered shell contains no user data and never reads auth cookies.
+  if (pathname === '/sin-conexion' || pathname === '/sin-conexion/') return addSecurityHeaders(await next());
 
   // Rate limit write endpoints: 60 requests per minute per IP
   const writeMethods = ['POST', 'PUT', 'DELETE', 'PATCH'];
@@ -71,7 +73,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
       const session = await auth.api.getSession({
         headers: context.request.headers,
       });
-      if (session) {
+      if (session && ['admin', 'veterinario', 'recepcionista'].includes((session.user as any).role) && (session.user as any).isActive !== false) {
         context.locals.user = session.user as any;
         context.locals.session = session.session as any;
       }
@@ -91,6 +93,11 @@ export const onRequest = defineMiddleware(async (context, next) => {
       if (pathname.startsWith('/api/')) {
         return jsonError(401, 'No autorizado');
       }
+      return context.redirect('/login');
+    }
+
+    if (!['admin', 'veterinario', 'recepcionista'].includes((session.user as any).role)) {
+      if (pathname.startsWith('/api/')) return jsonError(403, 'Acceso reservado al equipo veterinario');
       return context.redirect('/login');
     }
 

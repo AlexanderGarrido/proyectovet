@@ -71,46 +71,37 @@ export const POST: APIRoute = async ({ request, url }) => {
     return jsonError(400, 'external_reference inválida');
   }
 
-  // Idempotencia: Mercado Pago reintenta notificaciones. Si ya registramos
-  // este pago (mismo id de MP), no lo duplicamos.
   const reference = `mercadopago:${paymentId}`;
-  const [existing] = await db.select({ id: payments.id }).from(payments).where(eq(payments.reference, reference));
-  if (existing) return jsonOk({ received: true, alreadyProcessed: true });
-
-  const [invoice] = await db.select().from(invoices).where(eq(invoices.id, invoiceId));
-  if (!invoice) return jsonError(404, 'Factura no encontrada');
-  if (invoice.status === 'pagada' || invoice.status === 'anulada') {
-    return jsonOk({ received: true });
-  }
-
   const amount = mpPayment.transaction_amount ?? 0;
   const amountCents = toCents(amount);
+  if (!Number.isFinite(amountCents) || amountCents <= 0) return jsonError(400, 'Monto de pago inválido');
+  let audit: Parameters<typeof logAudit>[0] | undefined;
+  const response = await db.transaction(async (tx) => {
+    // All payment writers lock the same invoice before reading its balance.
+    const [invoice] = await tx.select().from(invoices).where(eq(invoices.id, invoiceId)).for('update');
+    if (!invoice) return jsonError(404, 'Factura no encontrada');
+    // Provider retries must be checked after obtaining the lock.
+    const [existing] = await tx.select({ id: payments.id }).from(payments).where(eq(payments.reference, reference));
+    if (existing) return jsonOk({ received: true, alreadyProcessed: true });
+    if (invoice.status === 'pagada' || invoice.status === 'anulada') return jsonOk({ received: true });
 
-  await db.insert(payments).values({
-    invoiceId,
-    amount: fromCents(amountCents),
-    method: 'otro',
-    reference,
-    date: new Date(),
-    // No hay usuario de sesión (llamada server-to-server) — se atribuye a
-    // quien emitió la factura, y queda igualmente trazado en auditoría.
-    receivedBy: invoice.createdBy,
+    const allPayments = await tx.select().from(payments).where(eq(payments.invoiceId, invoiceId));
+    const alreadyPaidCents = allPayments.reduce((sum, p) => sum + toCents(p.amount), 0);
+    const totalCents = toCents(invoice.total);
+    if (alreadyPaidCents + amountCents > totalCents) return jsonError(409, 'El pago recibido excede el saldo; requiere conciliación');
+    await tx.insert(payments).values({
+      invoiceId, amount: fromCents(amountCents), method: 'otro', reference,
+      date: new Date(), receivedBy: invoice.createdBy,
+    });
+    const paidCents = alreadyPaidCents + amountCents;
+    const newStatus = paidCents >= totalCents ? 'pagada' : 'parcial';
+    await tx.update(invoices).set({ status: newStatus }).where(eq(invoices.id, invoiceId));
+    audit = {
+      userId: invoice.createdBy, action: 'invoice.payment_webhook', entityType: 'invoice', entityId: invoiceId,
+      metadata: { mercadopagoPaymentId: paymentId, amount, newStatus },
+    };
+    return jsonOk({ received: true, newStatus });
   });
-
-  const allPayments = await db.select().from(payments).where(eq(payments.invoiceId, invoiceId));
-  const paidCents = allPayments.reduce((sum, p) => sum + toCents(p.amount), 0);
-  const totalCents = toCents(invoice.total);
-  const newStatus = paidCents >= totalCents ? 'pagada' : paidCents > 0 ? 'parcial' : invoice.status;
-
-  await db.update(invoices).set({ status: newStatus }).where(eq(invoices.id, invoiceId));
-
-  await logAudit({
-    userId: invoice.createdBy,
-    action: 'invoice.payment_webhook',
-    entityType: 'invoice',
-    entityId: invoiceId,
-    metadata: { mercadopagoPaymentId: paymentId, amount, newStatus },
-  });
-
-  return jsonOk({ received: true, newStatus });
+  if (audit) await logAudit(audit);
+  return response;
 };

@@ -1,12 +1,14 @@
+import { fetchFormData } from '../../lib/form-context';
 import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
 import { ownerFormSchema, type OwnerFormData } from '../../lib/schemas';
 
-interface Props { ownerId?: number; }
+export interface SavedOwner { id: number; firstName: string; lastName: string; email?: string | null; }
+interface Props { ownerId?: number; onSaved?: (owner: SavedOwner) => void; onCancel?: () => void; }
 
-export function OwnerForm({ ownerId }: Props) {
+export function OwnerForm({ ownerId, onSaved, onCancel }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -16,13 +18,12 @@ export function OwnerForm({ ownerId }: Props) {
 
   useEffect(() => {
     if (!ownerId) return;
-    fetch(`/api/owners/${ownerId}`)
-      .then((r) => r.json())
+    fetchFormData<OwnerFormData>(`/api/owners/${ownerId}`)
       .then((o) => reset({
         firstName: o.firstName, lastName: o.lastName,
         email: o.email || '', phone: o.phone || '',
         address: o.address || '', documentId: o.documentId || '',
-      }));
+      })).catch((e) => setError(e.message));
   }, [ownerId]);
 
   async function onSubmit(data: OwnerFormData) {
@@ -30,6 +31,7 @@ export function OwnerForm({ ownerId }: Props) {
     setError('');
     const url = ownerId ? `/api/owners/${ownerId}` : '/api/owners';
     const method = ownerId ? 'PUT' : 'POST';
+    try {
     const res = await fetch(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
@@ -38,8 +40,11 @@ export function OwnerForm({ ownerId }: Props) {
     const json = await res.json();
     if (!res.ok) { toast.error(json.error || 'Error al guardar'); setError(json.error || 'Error al guardar'); setLoading(false); return; }
     toast.success(ownerId ? 'Tutor actualizado correctamente' : 'Tutor registrado correctamente');
+    if (onSaved) { onSaved(json); return; }
     const nextUrl = ownerId ? `/tutores/${json.id}` : `/pacientes/nuevo?ownerId=${json.id}`;
     setTimeout(() => { window.location.href = nextUrl; }, 500);
+    } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo guardar. Reintenta.'); }
+    finally { setLoading(false); }
   }
 
   return (
@@ -78,9 +83,9 @@ export function OwnerForm({ ownerId }: Props) {
 
       <div className="flex gap-3">
         <button type="submit" disabled={loading} className="bg-primary text-primary-foreground px-6 py-2 rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-60 transition-colors">
-          {loading ? 'Guardando...' : 'Registrar Tutor'}
+          {loading ? 'Guardando...' : ownerId ? 'Actualizar responsable' : 'Registrar responsable'}
         </button>
-        <a href="/pacientes" className="px-6 py-2 rounded-lg text-sm font-medium border hover:bg-muted transition-colors">
+        <a onClick={onCancel ? (e) => { e.preventDefault(); onCancel(); } : undefined} href="/pacientes" className="px-6 py-2 rounded-lg text-sm font-medium border hover:bg-muted transition-colors">
           Cancelar
         </a>
       </div>

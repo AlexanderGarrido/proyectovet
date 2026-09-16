@@ -115,7 +115,7 @@ describe('PUT /api/appointments/:id — validación', () => {
       expect(res.status).not.toBe(400);
     } catch (err: any) {
       // Llegó a la BD — la validación fue exitosa
-      expect(err.message).toMatch(/update is not a function/);
+      expect(err.message).toMatch(/(?:update|transaction) is not a function/);
     }
   });
 });

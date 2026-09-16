@@ -43,6 +43,7 @@ export const GET: APIRoute = async ({ params, locals }) => {
       ownerLastName: owners.lastName,
       ownerEmail: owners.email,
       ownerPhone: owners.phone,
+      ownerAddress: owners.address,
     })
     .from(patients)
     .leftJoin(owners, eq(patients.ownerId, owners.id))
@@ -72,9 +73,9 @@ export const PUT: APIRoute = async ({ params, request, locals }) => {
   if ('error' in parsed) return parsed.error;
   const result = patientUpdateSchema.safeParse(parsed.data);
   if (!result.success) return zodError(result.error);
-  const { name, species, breed, color, sex, dateOfBirth, weight, microchipNumber, notes, isActive, photo } = result.data;
+  const { ownerId, name, species, breed, color, sex, dateOfBirth, weight, microchipNumber, notes, isActive, photo } = result.data;
 
-  await db.update(patients).set({ name, species, breed, color, sex, dateOfBirth: dateOfBirth || null, weight: weight || null, microchipNumber, notes, isActive, photo: photo ?? undefined }).where(eq(patients.id, id));
+  await db.update(patients).set({ ownerId, name, species, breed, color, sex, dateOfBirth: dateOfBirth === undefined ? undefined : dateOfBirth || null, weight: weight === undefined ? undefined : weight === null ? null : String(weight), microchipNumber, notes, isActive, photo }).where(eq(patients.id, id));
   const [updated] = await db.select().from(patients).where(eq(patients.id, id));
   return new Response(JSON.stringify(updated), { headers: { 'Content-Type': 'application/json' } });
 };

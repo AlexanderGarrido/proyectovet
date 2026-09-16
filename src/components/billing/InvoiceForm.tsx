@@ -1,3 +1,4 @@
+import { fetchFormData, safeVisitReturn, verifyInvoiceContext } from '../../lib/form-context';
 import { useState, useEffect } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -6,10 +7,11 @@ interface Owner { id: number; firstName: string; lastName: string; }
 interface Product { id: number; name: string; unitPrice: string; }
 interface LineItem { description: string; productId?: number; quantity: number; unitPrice: number; }
 
-export function InvoiceForm() {
+export function InvoiceForm({ ownerId: initialOwnerId, patientId, appointmentId, returnTo }: { ownerId?: number; patientId?: number; appointmentId?: number; returnTo?: string }) {
   const [owners, setOwners] = useState<Owner[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const [ownerId, setOwnerId] = useState('');
+  const [ownerId, setOwnerId] = useState(initialOwnerId?.toString() || '');
+  const [contextReady, setContextReady] = useState(false);
   const [items, setItems] = useState<LineItem[]>([{ description: '', quantity: 1, unitPrice: 0 }]);
   const [taxRate, setTaxRate] = useState('0');
   const [notes, setNotes] = useState('');
@@ -17,8 +19,29 @@ export function InvoiceForm() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    fetch('/api/owners').then((r) => r.json()).then(setOwners);
-    fetch('/api/inventory').then((r) => r.json()).then(setProducts);
+    async function load() {
+      try {
+        const [o, p] = await Promise.all([fetchFormData<Owner[]>('/api/owners'), fetchFormData<Product[]>('/api/inventory')]);
+        setProducts(p);
+        let resolvedOwner = initialOwnerId;
+        if (appointmentId) {
+          const a = await fetchFormData<{ ownerId: number; patientId: number; reason?: string }>(`/api/appointments/${appointmentId}`);
+          verifyInvoiceContext(a, { ownerId: initialOwnerId, patientId });
+          resolvedOwner = a.ownerId;
+          setOwnerId(String(a.ownerId));
+          if (a.reason) setItems([{ description: a.reason, quantity: 1, unitPrice: 0 }]);
+        } else if (patientId) {
+          const patient = await fetchFormData<{ ownerId: number }>(`/api/patients/${patientId}`);
+          verifyInvoiceContext({ ...patient, patientId }, { ownerId: initialOwnerId, patientId });
+          resolvedOwner = patient.ownerId;
+          setOwnerId(String(patient.ownerId));
+        }
+        if (resolvedOwner && !o.some((owner) => owner.id === resolvedOwner)) o.push(await fetchFormData<Owner>(`/api/owners/${resolvedOwner}`));
+        setOwners(o);
+        setContextReady(true);
+      } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo cargar el contexto del cobro'); }
+    }
+    void load();
   }, []);
 
   function addItem() { setItems([...items, { description: '', quantity: 1, unitPrice: 0 }]); }
@@ -39,19 +62,23 @@ export function InvoiceForm() {
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!contextReady) { setError('Espera la validación de la cita y responsable'); return; }
     if (!ownerId) { setError('Selecciona un tutor'); return; }
     if (items.some((it) => !it.description || it.quantity < 1)) { setError('Completa todos los items'); return; }
     setLoading(true);
     setError('');
+    try {
     const res = await fetch('/api/invoices', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ownerId: Number(ownerId), items, taxRate: parseFloat(taxRate), notes }),
+      body: JSON.stringify({ ownerId: Number(ownerId), appointmentId, patientId, items, taxRate: parseFloat(taxRate), notes }),
     });
     const json = await res.json();
     if (!res.ok) { toast.error(json.error || 'Error al guardar'); setError(json.error || 'Error al guardar'); setLoading(false); return; }
     toast.success('Factura creada correctamente');
-    setTimeout(() => { window.location.href = `/facturacion/${json.id}`; }, 500);
+    setTimeout(() => { window.location.href = safeVisitReturn(returnTo) || `/facturacion/${json.id}`; }, 500);
+    } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo guardar. Reintenta.'); }
+    finally { setLoading(false); }
   }
 
   return (
@@ -60,7 +87,7 @@ export function InvoiceForm() {
 
       <div>
         <label className="block text-sm font-medium mb-1">Tutor *</label>
-        <select value={ownerId} onChange={(e) => setOwnerId(e.target.value)}
+        <select disabled={!!appointmentId || !!patientId} value={ownerId} onChange={(e) => setOwnerId(e.target.value)}
           className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30">
           <option value="">Seleccionar tutor...</option>
           {owners.map((o) => <option key={o.id} value={o.id}>{o.firstName} {o.lastName}</option>)}
@@ -75,8 +102,8 @@ export function InvoiceForm() {
             <Plus className="h-3.5 w-3.5" /> Agregar línea
           </button>
         </div>
-        <div className="rounded-xl border overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="rounded-xl border overflow-x-auto">
+          <table className="w-full min-w-[560px] text-sm">
             <thead className="bg-muted/50">
               <tr>
                 <th className="text-left px-3 py-2 font-medium text-muted-foreground">Descripción</th>
@@ -156,11 +183,11 @@ export function InvoiceForm() {
       </div>
 
       <div className="flex gap-3">
-        <button type="submit" disabled={loading}
+        <button type="submit" disabled={loading || !contextReady}
           className="bg-primary text-primary-foreground px-6 py-2 rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-60 transition-colors">
           {loading ? 'Guardando...' : 'Emitir Factura'}
         </button>
-        <a href="/facturacion" className="px-6 py-2 rounded-lg text-sm font-medium border hover:bg-muted transition-colors">Cancelar</a>
+        <a href={safeVisitReturn(returnTo) || "/facturacion"} className="px-6 py-2 rounded-lg text-sm font-medium border hover:bg-muted transition-colors">Cancelar</a>
       </div>
     </form>
   );

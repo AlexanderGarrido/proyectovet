@@ -1,6 +1,6 @@
 /* Only the public offline shell and versioned application assets are cached.
  * Authenticated HTML and API responses are never stored here. */
-const CACHE = 'alma-shell-v1';
+const CACHE = 'alma-shell-v2';
 const SHELL = '/sin-conexion';
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
@@ -20,8 +20,15 @@ self.addEventListener('install', (event) => {
       await Promise.all(refs.map(load));
     }
     await load(SHELL);
-    await self.skipWaiting();
+    // Sin skipWaiting: una versión nueva no reemplaza a la que está
+    // controlando pestañas abiertas. Si una de ellas tiene guardados sin
+    // sincronizar, cambiar el service worker a mitad del envío podría
+    // dejarlos en un estado difícil de explicar. La página pide el cambio
+    // (mensaje 'activar-actualizacion') cuando su cola está vacía.
   })());
+});
+self.addEventListener('message', (event) => {
+  if (event.data === 'activar-actualizacion') self.skipWaiting();
 });
 self.addEventListener('activate', (event) => event.waitUntil((async () => {
   for (const key of await caches.keys()) if (key.startsWith('alma-shell-') && key !== CACHE) await caches.delete(key);

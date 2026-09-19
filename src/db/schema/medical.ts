@@ -36,10 +36,20 @@ export const medicalRecords = pgTable('medical_records', {
     weight?: number;
     respiratoryRate?: number;
   }>(),
+  // Una corrección posterior al cierre no reescribe la nota original: se
+  // guarda como registro nuevo que apunta al anterior. Así el historial
+  // muestra qué se dijo, cuándo se corrigió y quién lo hizo, en vez de
+  // dejar una versión editada sin rastro de la primera.
+  amendsRecordId: integer('amends_record_id'),
+  // Plantilla con la que se redactó, y su versión en ese momento: una
+  // plantilla que cambia después no debe alterar la lectura de la nota.
+  templateId: integer('template_id'),
+  templateVersion: integer('template_version'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 }, (t) => ({
   idxPatientId: index('idx_medical_records_patient').on(t.patientId),
   idxDate: index('idx_mr_date').on(t.date),
+  idxAmends: index('idx_mr_amends').on(t.amendsRecordId),
 }));
 
 export const vaccines = pgTable('vaccines', {

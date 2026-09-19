@@ -51,7 +51,8 @@ export function AppointmentForm({ appointmentId, patientId, followup = false, re
         } : undefined));
         if (a) reset({ ...a, patientId: String(a.patientId), ownerId: String(a.ownerId),
           scheduledAt: toClinicInput(a.scheduledAt), endAt: toClinicInput(a.endAt),
-          visitAddress: a.visitAddress || '', reason: a.reason || '', notes: a.notes || '' });
+          visitAddress: a.visitAddress || '', sector: a.sector || '', travelBufferMinutes: String(a.travelBufferMinutes ?? 0),
+          reason: a.reason || '', notes: a.notes || '' });
         setReady(true);
       } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo cargar la cita'); }
     }
@@ -159,6 +160,21 @@ export function AppointmentForm({ appointmentId, patientId, followup = false, re
             placeholder="Dirección donde se realizará la visita..."
           />
           <p className="text-xs text-muted-foreground mt-1">Se pre-llena con la dirección del tutor al seleccionar paciente.</p>
+        </div>
+
+        {/* La agenda a domicilio ocupa también el tiempo del viaje: sin
+            declararlo, dos visitas seguidas en extremos opuestos de la
+            ciudad se ven como compatibles. */}
+        <div>
+          <label className="block text-sm font-medium mb-1">Sector</label>
+          <input {...register('sector')} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" placeholder="Ej. norte, centro, costa" />
+          <p className="text-xs text-muted-foreground mt-1">Agrupación operativa propia de la clínica.</p>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-1">Colchón de traslado (min)</label>
+          <input type="number" min="0" max="240" {...register('travelBufferMinutes')} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" placeholder="0" />
+          <p className="text-xs text-muted-foreground mt-1">Se reserva después de la visita y se considera al validar solapamientos.</p>
         </div>
 
         <div className="sm:col-span-2">

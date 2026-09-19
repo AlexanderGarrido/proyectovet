@@ -70,3 +70,66 @@ describe('Cola de visitas', () => {
     await activateFieldUser('vet-a'); expect(await listPending('vet-a')).toEqual([]); expect(await getDay('vet-a')).toBeNull();
   });
 });
+
+describe('Clasificación de resultados de sincronización', () => {
+  it('una sesión vencida se distingue de un rechazo de datos', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ error: 'Tu sesión venció' }, { status: 401 })));
+    await queueVisit('vet-a', operation);
+    await syncPending('vet-a');
+    expect((await listPending('vet-a'))[0]).toMatchObject({ outcome: 'sesion', blocked: true, attempts: 1 });
+  });
+
+  it('un rechazo confirmado no se reintenta solo', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ error: 'Stock insuficiente' }, { status: 409 })));
+    await queueVisit('vet-a', operation);
+    await syncPending('vet-a');
+    await syncPending('vet-a');
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect((await listPending('vet-a'))[0]).toMatchObject({ outcome: 'rechazo', blocked: true });
+  });
+
+  it('un 5xx es transitorio y sigue siendo reintentable', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ error: 'No disponible' }, { status: 503 })));
+    await queueVisit('vet-a', operation);
+    await syncPending('vet-a');
+    const [pending] = await listPending('vet-a');
+    expect(pending).toMatchObject({ outcome: 'transitorio', blocked: false });
+    expect(pending.lastAttemptAt).toBeTruthy();
+  });
+
+  it('sin respuesta el resultado es incierto y conserva el mismo identificador', async () => {
+    // El servidor pudo haberla aplicado: descartar la operación y crear
+    // otra sería el camino directo a un cobro duplicado.
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('network'); }));
+    await queueVisit('vet-a', operation);
+    await syncPending('vet-a');
+    const [pending] = await listPending('vet-a');
+    expect(pending.outcome).toBe('incierto');
+    // No queda bloqueada: hay que reenviarla, no corregirla.
+    expect(pending.blocked).toBeFalsy();
+    expect(pending.operation.id).toBe(operation.id);
+  });
+
+  it('guarda la etiqueta del paciente para el centro de sincronización', async () => {
+    await queueVisit('vet-a', operation, 'Luna');
+    expect((await listPending('vet-a'))[0].label).toBe('Luna');
+  });
+
+  it('lee borradores escritos por la versión anterior, sin envoltorio', async () => {
+    // Un borrador viejo contiene trabajo que nadie más tiene: se migra al
+    // leerlo, nunca se descarta por no reconocer su forma.
+    const legacy = { reason: 'Escrito por la versión anterior' };
+    const db: IDBDatabase = await new Promise((resolve) => {
+      const request = indexedDB.open('alma-field-v1', 2);
+      request.onupgradeneeded = () => { if (!request.result.objectStoreNames.contains('data')) request.result.createObjectStore('data'); };
+      request.onsuccess = () => resolve(request.result);
+    });
+    await new Promise<void>((resolve) => {
+      const tx = db.transaction('data', 'readwrite');
+      tx.objectStore('data').put(legacy, 'vet-a:draft:42');
+      tx.oncomplete = () => resolve();
+    });
+    db.close();
+    expect(await loadFieldDraft('vet-a', 42)).toEqual(legacy);
+  });
+});

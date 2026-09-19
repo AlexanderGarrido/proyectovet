@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Menu, Moon, Sun, PanelLeft, Search, LogOut, PawPrint, Users, Loader2 } from 'lucide-react';
-import { OnlineStatus } from '../common/OnlineStatus';
+import { SyncStatus } from '../common/SyncStatus';
 import { signOut } from '../../lib/auth-client';
 import { clearFieldData, currentFieldUser, listPending } from '../../lib/field-storage';
 import { cn } from '../../lib/utils';
@@ -20,7 +20,7 @@ const roleLabels: Record<string, string> = {
 };
 
 interface PatientResult { id: number; name: string; ownerFirstName?: string | null; ownerLastName?: string | null; }
-interface OwnerResult { id: number; firstName: string; lastName: string; }
+interface OwnerResult { id: number; firstName: string; lastName: string; phone?: string | null; }
 
 export function Header({ title, userName, userRole, onMenuToggle, onSidebarCollapse }: HeaderProps) {
   const [dark, setDark] = useState(false);
@@ -79,7 +79,7 @@ export function Header({ title, userName, userRole, onMenuToggle, onSidebarColla
       </div>
 
       <div className="ml-auto flex items-center gap-1.5 shrink-0">
-        <OnlineStatus />
+        <SyncStatus />
         <button
           onClick={toggleDark}
           className="p-3 -m-1 rounded-md hover:bg-muted transition-colors"
@@ -113,41 +113,52 @@ export function Header({ title, userName, userRole, onMenuToggle, onSidebarColla
 }
 
 /**
- * Búsqueda rápida de pacientes/tutores desde el header — reutiliza los
- * endpoints ya existentes y protegidos (?search=), sin backend nuevo.
- * Solo se muestra a staff (un tutor no tiene por qué buscar en toda la
- * clínica; además esos endpoints ya rechazan su rol).
+ * Búsqueda rápida desde el encabezado — reutiliza los endpoints existentes
+ * y protegidos (?search=), sin backend nuevo. El de pacientes ahora también
+ * cruza nombre y teléfono del responsable, que suele ser el único dato a
+ * mano cuando llaman desde un domicilio.
+ *
+ * Tres detalles que antes faltaban: una respuesta lenta ya no puede pisar
+ * los resultados de una consulta posterior (contador de secuencia), un
+ * fallo de red se distingue de «sin resultados», y Escape cierra la lista
+ * devolviendo el foco al campo.
  */
 function HeaderSearch() {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState(false);
   const [patients, setPatients] = useState<PatientResult[]>([]);
   const [owners, setOwners] = useState<OwnerResult[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  // Cada búsqueda lleva número: solo la última escrita puede pintar.
+  const sequence = useRef(0);
 
   useEffect(() => {
     const q = query.trim();
+    const ticket = ++sequence.current;
     if (q.length < 2) {
-      setPatients([]);
-      setOwners([]);
-      setLoading(false);
+      setPatients([]); setOwners([]); setLoading(false); setFailed(false);
       return;
     }
-    setLoading(true);
+    setLoading(true); setFailed(false);
     const timer = setTimeout(async () => {
       try {
         const [patientsRes, ownersRes] = await Promise.all([
           fetch(`/api/patients?search=${encodeURIComponent(q)}&limit=5`),
           fetch(`/api/owners?search=${encodeURIComponent(q)}&limit=5`),
         ]);
+        if (ticket !== sequence.current) return;
+        if (!patientsRes.ok && !ownersRes.ok) throw new Error('Búsqueda no disponible');
         setPatients(patientsRes.ok ? await patientsRes.json() : []);
         setOwners(ownersRes.ok ? await ownersRes.json() : []);
+        setFailed(!patientsRes.ok || !ownersRes.ok);
       } catch {
-        setPatients([]);
-        setOwners([]);
+        if (ticket !== sequence.current) return;
+        setPatients([]); setOwners([]); setFailed(true);
       } finally {
-        setLoading(false);
+        if (ticket === sequence.current) setLoading(false);
       }
     }, 300);
     return () => clearTimeout(timer);
@@ -171,21 +182,32 @@ function HeaderSearch() {
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
         <input
-          type="text"
+          ref={inputRef}
+          type="search"
+          role="combobox"
+          aria-expanded={showDropdown}
+          aria-controls="busqueda-encabezado"
+          aria-label="Buscar pacientes o responsables"
           value={query}
           onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
           onFocus={() => setOpen(true)}
-          placeholder="Buscar pacientes, tutores..."
-          className="w-full pl-9 pr-3 h-10 rounded-lg bg-muted border border-transparent text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:bg-background focus:border-border transition-colors"
+          onKeyDown={(e) => { if (e.key === 'Escape' && showDropdown) { e.stopPropagation(); setOpen(false); inputRef.current?.focus(); } }}
+          placeholder="Buscar paciente, responsable o teléfono"
+          // 16px evita el zoom automático de Safari/iOS al enfocar el campo.
+          className="w-full pl-9 pr-3 h-11 rounded-lg bg-muted border border-transparent text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:bg-background focus:border-border transition-colors"
         />
       </div>
 
       {showDropdown && (
-        <div className="absolute top-full left-0 right-0 mt-1.5 bg-popover border border-border rounded-lg shadow-lg overflow-hidden max-h-96 overflow-y-auto z-50">
+        <div id="busqueda-encabezado" role="listbox" className="absolute top-full left-0 right-0 mt-1.5 bg-popover border border-border rounded-lg shadow-lg overflow-hidden max-h-96 overflow-y-auto z-50">
           {loading ? (
             <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" /> Buscando...
             </div>
+          ) : failed && !hasResults ? (
+            <p role="alert" className="py-6 px-3 text-center text-sm text-muted-foreground">
+              No se pudo buscar. Revisa la conexión y escribe de nuevo.
+            </p>
           ) : !hasResults ? (
             <p className="py-6 text-center text-sm text-muted-foreground">Sin resultados para "{query}"</p>
           ) : (
@@ -194,8 +216,8 @@ function HeaderSearch() {
                 <div className="py-1.5">
                   <p className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/80">Pacientes</p>
                   {patients.map((p) => (
-                    <a key={p.id} href={`/pacientes/${p.id}`}
-                      className="flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-muted transition-colors">
+                    <a key={p.id} href={`/pacientes/${p.id}`} role="option" aria-selected={false}
+                      className="flex items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-muted transition-colors">
                       <PawPrint className="h-4 w-4 text-primary shrink-0" />
                       <span className="truncate">{p.name}</span>
                       {(p.ownerFirstName || p.ownerLastName) && (
@@ -207,15 +229,21 @@ function HeaderSearch() {
               )}
               {owners.length > 0 && (
                 <div className={cn('py-1.5', patients.length > 0 && 'border-t border-border')}>
-                  <p className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/80">Tutores</p>
+                  <p className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/80">Responsables</p>
                   {owners.map((o) => (
-                    <a key={o.id} href={`/tutores/${o.id}`}
-                      className="flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-muted transition-colors">
+                    <a key={o.id} href={`/tutores/${o.id}`} role="option" aria-selected={false}
+                      className="flex items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-muted transition-colors">
                       <Users className="h-4 w-4 text-primary shrink-0" />
                       <span className="truncate">{o.firstName} {o.lastName}</span>
+                      {o.phone && <span className="text-xs text-muted-foreground truncate">— {o.phone}</span>}
                     </a>
                   ))}
                 </div>
+              )}
+              {failed && (
+                <p role="status" className="border-t border-border px-3 py-2 text-xs text-muted-foreground">
+                  Parte de la búsqueda no respondió; la lista puede estar incompleta.
+                </p>
               )}
             </>
           )}

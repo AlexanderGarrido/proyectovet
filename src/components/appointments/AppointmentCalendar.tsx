@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, X, Clock, User, PawPrint, Stethoscope, FileText, MapPin, Calendar } from 'lucide-react';
 import { googleMapsUrl, wazeUrl, appleMapsUrl } from '../../lib/maps';
+import { addClinicDays, clinicDateLabel, clinicDay, clinicDayRange, clinicHhmm, clinicMinutes, clinicParts, clinicWeekStart } from '../../lib/clinic-time';
 
 interface Appointment {
   id: number;
@@ -39,52 +40,53 @@ const GRID_END   = 21 * 60;
 const GRID_RANGE = GRID_END - GRID_START;
 const HOURS      = Array.from({ length: 15 }, (_, i) => i + 7);
 
-function toMin(d: Date) { return d.getHours() * 60 + d.getMinutes(); }
-function hhmm(d: Date)  { return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; }
-function getWeekStart(d: Date) {
-  const r = new Date(d);
-  const day = r.getDay();
-  r.setDate(r.getDate() + (day === 0 ? -6 : 1 - day));
-  r.setHours(0,0,0,0);
-  return r;
-}
-function addDays(d: Date, n: number) { const r = new Date(d); r.setDate(r.getDate() + n); return r; }
+// La grilla trabaja con días `YYYY-MM-DD` del horario de la clínica, no con
+// objetos Date del dispositivo: con `getHours()` un teléfono configurado en
+// otra zona dibujaba la misma cita en otra fila que la que muestra Hoy.
 
 export function AppointmentCalendar() {
-  const [weekStart, setWeekStart]       = useState(() => getWeekStart(new Date()));
+  const today                           = clinicDay();
+  const [weekStart, setWeekStart]       = useState(() => clinicWeekStart(today));
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading]           = useState(true);
+  const [failed, setFailed]             = useState(false);
   const [selected, setSelected]         = useState<Appointment | null>(null);
   useEffect(() => { fetchWeek(); }, [weekStart]);
 
   async function fetchWeek() {
-    setLoading(true);
-    const res = await fetch(`/api/appointments?from=${weekStart.toISOString()}&to=${addDays(weekStart, 7).toISOString()}`);
-    if (res.ok) setAppointments(await res.json());
-    setLoading(false);
+    setLoading(true); setFailed(false);
+    try {
+      const from = clinicDayRange(weekStart).start;
+      const to   = clinicDayRange(addClinicDays(weekStart, 6)).end;
+      const res  = await fetch(`/api/appointments?from=${from.toISOString()}&to=${to.toISOString()}`);
+      if (!res.ok) throw new Error('No se pudo cargar la agenda');
+      setAppointments(await res.json());
+    } catch {
+      // Una semana que no cargó no es una semana vacía: la diferencia
+      // decide si el operador agenda encima de una cita existente.
+      setAppointments([]); setFailed(true);
+    } finally {
+      setLoading(false);
+    }
   }
 
   function dayAppts(idx: number) {
-    const day = addDays(weekStart, idx);
-    return appointments.filter(a => {
-      const d = new Date(a.scheduledAt);
-      return d.getFullYear() === day.getFullYear() && d.getMonth() === day.getMonth() && d.getDate() === day.getDate();
-    });
+    const day = addClinicDays(weekStart, idx);
+    return appointments.filter(a => clinicParts(a.scheduledAt)?.day === day);
   }
 
   function blockStyle(a: Appointment) {
-    const s = Math.max(toMin(new Date(a.scheduledAt)), GRID_START) - GRID_START;
-    const e = Math.min(toMin(new Date(a.endAt)),       GRID_END)   - GRID_START;
+    const s = Math.max(clinicMinutes(a.scheduledAt), GRID_START) - GRID_START;
+    const e = Math.min(clinicMinutes(a.endAt),       GRID_END)   - GRID_START;
     return {
       top:       `${(s / GRID_RANGE) * 100}%`,
-      height:    `${((e - s) / GRID_RANGE) * 100}%`,
+      height:    `${(Math.max(e - s, 15) / GRID_RANGE) * 100}%`,
       minHeight: '42px',   // garantiza espacio para hora + nombre
     };
   }
 
-  const today         = new Date();
-  const isCurrentWeek = getWeekStart(today).getTime() === weekStart.getTime();
-  const monthLabel    = weekStart.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+  const isCurrentWeek = clinicWeekStart(today) === weekStart;
+  const monthLabel    = clinicDateLabel(weekStart, { month: 'long', year: 'numeric' });
 
   return (
     <div className="flex flex-col gap-4">
@@ -93,13 +95,13 @@ export function AppointmentCalendar() {
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex items-center rounded-lg border border-border overflow-hidden">
           <button
-            onClick={() => setWeekStart(d => addDays(d, -7))}
+            onClick={() => setWeekStart(d => addClinicDays(d, -7))}
             className="px-3 py-2 hover:bg-muted transition-colors border-r border-border"
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
           <button
-            onClick={() => setWeekStart(d => addDays(d, 7))}
+            onClick={() => setWeekStart(d => addClinicDays(d, 7))}
             className="px-3 py-2 hover:bg-muted transition-colors"
           >
             <ChevronRight className="h-4 w-4" />
@@ -110,7 +112,7 @@ export function AppointmentCalendar() {
 
         {!isCurrentWeek && (
           <button
-            onClick={() => setWeekStart(getWeekStart(new Date()))}
+            onClick={() => setWeekStart(clinicWeekStart(clinicDay()))}
             className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-border hover:bg-muted transition-colors"
           >
             <Calendar className="h-3.5 w-3.5" />
@@ -119,6 +121,12 @@ export function AppointmentCalendar() {
         )}
 
         {loading && <span className="text-sm text-muted-foreground animate-pulse">Cargando…</span>}
+        {failed && !loading && (
+          <span role="alert" className="flex items-center gap-2 text-sm text-destructive">
+            No se pudo cargar esta semana.
+            <button onClick={fetchWeek} className="underline underline-offset-2">Reintentar</button>
+          </span>
+        )}
       </div>
 
       {/* ── Grid ────────────────────────────────────────────── */}
@@ -128,8 +136,8 @@ export function AppointmentCalendar() {
         <div className="grid grid-cols-8 border-b border-border bg-muted/30">
           <div className="py-3 border-r border-border" />
           {DAYS.map((name, i) => {
-            const col     = addDays(weekStart, i);
-            const isToday = col.toDateString() === today.toDateString();
+            const col     = addClinicDays(weekStart, i);
+            const isToday = col === today;
             return (
               <div key={i} className={`py-3 border-r last:border-r-0 border-border text-center ${isToday ? 'bg-primary/5' : ''}`}>
                 <p className={`text-xs font-medium uppercase tracking-widest ${isToday ? 'text-primary' : 'text-muted-foreground'}`}>
@@ -137,7 +145,7 @@ export function AppointmentCalendar() {
                 </p>
                 <div className={`mx-auto mt-1.5 w-8 h-8 flex items-center justify-center rounded-full text-sm font-bold
                   ${isToday ? 'bg-primary text-white' : 'text-foreground'}`}>
-                  {col.getDate()}
+                  {Number(col.slice(8, 10))}
                 </div>
               </div>
             );
@@ -164,8 +172,8 @@ export function AppointmentCalendar() {
 
           {/* Day columns */}
           {DAYS.map((_, dayIdx) => {
-            const col     = addDays(weekStart, dayIdx);
-            const isToday = col.toDateString() === today.toDateString();
+            const col     = addClinicDays(weekStart, dayIdx);
+            const isToday = col === today;
             const appts   = dayAppts(dayIdx);
 
             return (
@@ -202,7 +210,7 @@ export function AppointmentCalendar() {
                       onClick={() => setSelected(a)}
                     >
                       <span className="text-[11px] font-bold leading-tight w-full truncate">
-                        {hhmm(new Date(a.scheduledAt))} – {hhmm(new Date(a.endAt))}
+                        {clinicHhmm(a.scheduledAt)} – {clinicHhmm(a.endAt)}
                       </span>
                       {a.patientName && (
                         <span className="text-[11px] leading-tight font-medium w-full truncate mt-0.5 opacity-90">
@@ -268,10 +276,10 @@ export function AppointmentCalendar() {
                 <Row icon={<Clock className="h-4 w-4 text-muted-foreground" />}>
                   <div>
                     <p className="font-medium capitalize">
-                      {new Date(selected.scheduledAt).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}
+                      {clinicDateLabel(clinicParts(selected.scheduledAt)?.day ?? '', { weekday: 'long', day: 'numeric', month: 'long' })}
                     </p>
                     <p className="text-muted-foreground text-xs mt-0.5">
-                      {hhmm(new Date(selected.scheduledAt))} – {hhmm(new Date(selected.endAt))}
+                      {clinicHhmm(selected.scheduledAt)} – {clinicHhmm(selected.endAt)}
                     </p>
                   </div>
                 </Row>

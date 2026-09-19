@@ -2,7 +2,15 @@ import { fromClinicInput } from './clinic-time';
 import type { AppointmentFormData } from './schemas';
 
 export function appointmentRequest(data: AppointmentFormData) {
-  return { ...data, patientId: Number(data.patientId), ownerId: Number(data.ownerId), scheduledAt: fromClinicInput(data.scheduledAt), endAt: fromClinicInput(data.endAt) };
+  return {
+    ...data,
+    patientId: Number(data.patientId), ownerId: Number(data.ownerId),
+    scheduledAt: fromClinicInput(data.scheduledAt), endAt: fromClinicInput(data.endAt),
+    // El colchón viaja como número; vacío significa cero, no "sin declarar",
+    // porque la validación de solapamiento necesita un valor concreto.
+    travelBufferMinutes: Number(data.travelBufferMinutes || 0),
+    sector: data.sector?.trim() || null,
+  };
 }
 
 export function positiveId(value: unknown): number | undefined {

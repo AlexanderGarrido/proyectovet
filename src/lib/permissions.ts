@@ -90,20 +90,52 @@ export function requiresOwnershipCheck(role: UserRole, resource: string, action:
 // secciones con encabezado en mayúsculas — Principal/Gestión/Reportes/
 // Sistema). Sidebar.tsx solo imprime el encabezado de sección cuando hay
 // más de una sección presente.
-export function getNavItems(role: UserRole) {
-  const allItems = [
-    { label: 'Hoy', href: '/dashboard', icon: 'LayoutDashboard', permission: 'dashboard:read', section: 'Principal' },
-    { label: 'Agenda', href: '/citas', icon: 'Calendar', permission: 'appointments:read', section: 'Principal' },
-    { label: 'Pacientes', href: '/pacientes', icon: 'PawPrint', permission: 'patients:read', section: 'Principal' },
-    { label: 'Botiquín', href: '/inventario', icon: 'Package', permission: 'inventory:read', section: 'Principal' },
-    { label: 'Cobros', href: '/facturacion', icon: 'Receipt', permission: 'invoices:read', section: 'Principal' },
-    { label: 'Reportes', href: '/metricas', icon: 'BarChart3', permission: 'admin', section: 'Administración' },
-    { label: 'Configuración', href: '/configuracion', icon: 'Settings', permission: 'admin', section: 'Administración' },
+export interface NavItem {
+  label: string;
+  href: string;
+  icon: string;
+  section: string;
+  /** Aparece en la barra inferior móvil (una mano, cinco destinos como máximo). */
+  primary?: boolean;
+  /** Prefijos de ruta que también marcan este ítem como activo. */
+  match?: string[];
+}
+
+export function getNavItems(role: UserRole): NavItem[] {
+  // El menú abría siempre /inventario (listado general de productos) aunque
+  // el veterinario en terreno trabaja sobre el botiquín que tiene asignado.
+  // La etiqueta y el destino siguen al rol; la ruta general se conserva.
+  const inventory = role === 'veterinario'
+    ? { label: 'Mi botiquín', href: '/inventario/botiquin', match: ['/inventario'] }
+    : { label: 'Botiquín', href: '/inventario', match: ['/inventario'] };
+
+  const allItems: (NavItem & { permission: string })[] = [
+    { label: 'Hoy', href: '/dashboard', icon: 'LayoutDashboard', permission: 'dashboard:read', section: 'Principal', primary: true },
+    { label: 'Agenda', href: '/citas', icon: 'Calendar', permission: 'appointments:read', section: 'Principal', primary: true, match: ['/citas'] },
+    { label: 'Pacientes', href: '/pacientes', icon: 'PawPrint', permission: 'patients:read', section: 'Principal', primary: true, match: ['/pacientes', '/tutores', '/historial', '/recetas', '/ordenes', '/consentimientos'] },
+    { ...inventory, icon: 'Package', permission: 'inventory:read', section: 'Principal', primary: true },
+    { label: 'Cobros', href: '/facturacion', icon: 'Receipt', permission: 'invoices:read', section: 'Principal', primary: true, match: ['/facturacion'] },
+    { label: 'Reportes', href: '/metricas', icon: 'BarChart3', permission: 'admin', section: 'Administración', match: ['/metricas'] },
+    { label: 'Configuración', href: '/configuracion', icon: 'Settings', permission: 'admin', section: 'Administración', match: ['/configuracion'] },
   ];
 
-  return allItems.filter((item) => {
-    if (item.permission === 'admin') return role === 'admin';
-    const [resource, action] = item.permission.split(':');
-    return hasPermission(role, resource, action);
-  });
+  return allItems
+    .filter((item) => {
+      if (item.permission === 'admin') return role === 'admin';
+      const [resource, action] = item.permission.split(':');
+      return hasPermission(role, resource, action);
+    })
+    .map(({ permission, ...item }) => item);
+}
+
+/**
+ * Un ítem está activo si la ruta actual es la suya o cae bajo alguno de sus
+ * prefijos declarados. Comparar por `startsWith` sobre el href directo hacía
+ * que "/inventario/botiquin" no marcara "Botiquín" cuando el href del rol es
+ * la otra ruta del mismo área.
+ */
+export function isNavItemActive(item: NavItem, currentPath: string): boolean {
+  if (currentPath === item.href) return true;
+  const prefixes = item.match ?? (item.href === '/dashboard' ? [] : [item.href]);
+  return prefixes.some((prefix) => currentPath === prefix || currentPath.startsWith(`${prefix}/`));
 }

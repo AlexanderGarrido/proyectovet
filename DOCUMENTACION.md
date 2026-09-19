@@ -15,12 +15,50 @@
 | Principal | Contenido |
 |---|---|
 | Hoy | Jornada, visita actual, pendientes, saldos y tiempo promedio |
-| Agenda | Lista/calendario, alta, edición y acceso a la visita |
-| Pacientes | Ficha, responsable, vacunas, recetas, laboratorio, consentimientos |
-| Botiquín | Inventario, ubicaciones y movimientos |
+| Agenda | Lista, calendario y recorrido del día |
+| Pacientes | Ficha, cronología, responsable, vacunas, recetas, laboratorio, consentimientos |
+| Botiquín | Preparación del día, inventario, ubicaciones y movimientos |
 | Cobros | Servicios emitidos, pagos y acceso autorizado a reportes |
 
+En móvil las cinco áreas están en una barra inferior filtrada por permisos; en escritorio se conserva el menú lateral. El destino de Botiquín depende del rol: un veterinario llega a su botiquín asignado, administración y recepción al inventario general.
+
 Las rutas históricas de responsables/documentos se conservan para compatibilidad. Administración mantiene Configuración y Reportes en un nivel secundario.
+
+Todas las horas de la agenda, el calendario y la jornada se calculan en `America/Santiago` mediante `clinic-time.ts`, no con el reloj del dispositivo: un teléfono configurado en otra zona muestra las mismas horas.
+
+## Atención: plantillas, antecedentes y cronología
+
+Cada tipo de visita ofrece una plantilla que ordena los campos y sugiere frases. La plantilla aporta estructura y texto editable; **no rellena hallazgos, diagnósticos ni tratamientos**. Un campo vacío queda como no registrado, que no es lo mismo que normal. La nota guarda con qué plantilla y versión se redactó, de modo que editarla después no cambia cómo se lee una consulta anterior.
+
+La cabecera de la visita muestra especie, peso con su fecha de medición, última atención y las alertas registradas para ese paciente. «Sin alertas registradas» y «no se pudieron cargar las alertas» se muestran distinto a propósito: llevan a decisiones opuestas frente a un paciente que podría morder.
+
+`GET /api/patients/:id/timeline` reúne consultas, citas, vacunas, recetas, laboratorio, documentos, cobros y comunicaciones en una sola lista paginada por cursor (`fecha|clave`), con filtros por tipo y permisos aplicados en el servidor: recepción no lee la nota clínica aunque pida ese filtro.
+
+Una corrección posterior al cierre se registra como adenda —un registro nuevo que apunta al original, con autor y fecha—; la nota original nunca se reescribe.
+
+## Prestaciones y cobro
+
+El catálogo de `services` define qué se hace, cuánto cuesta y qué insumos consume. Seleccionar una prestación prepara una propuesta editable: **no mueve stock ni emite cobro hasta confirmar**. El importe lo calcula el servidor con la tarifa vigente; el cliente solo declara qué se realizó y en qué cantidad, así que una copia con precios antiguos no puede fijar el monto.
+
+Un paquete se cobra a su propio precio como una línea; sus prestaciones hijas aportan insumos e indicaciones, no líneas adicionales. Cada prestación realizada queda en `visit_service_items` con el precio del momento y el identificador de la operación que la creó: es la referencia única que impide que la misma atención se cobre otra vez desde el formulario general de facturación. La visita y el formulario general comparten el catálogo y el mismo componente de cálculo.
+
+La pantalla distingue tres hechos distintos: prestación realizada, cobro emitido y pago recibido. Alma emite un documento interno; cualquier integración tributaria es otro proyecto.
+
+## Recorrido y varias mascotas en un domicilio
+
+La cita admite sector y colchón de traslado declarados a mano, y la validación de solapamientos los considera: dos visitas seguidas en extremos opuestos de la ciudad dejan de verse como compatibles. Ningún proveedor de rutas participa; la agenda funciona sin depender de un servicio externo.
+
+Una parada agrupa las citas de un mismo domicilio, **solo cuando el operador lo indica**: dos pacientes con el mismo apellido no comparten casa por sí solos. Cada mascota conserva su consulta y su cobro; el traslado se atribuye a una sola visita del grupo y queda visible allí, sin repartirse entre responsables distintos. Reordenar cambia el orden del recorrido, nunca el horario de una cita confirmada.
+
+## Pendientes y seguimiento
+
+`followup_tasks` guarda lo que queda por hacer con responsable, vencimiento y paciente. Cerrar una consulta con saldo no la deja incompleta: genera una tarea de cobro, que es otra cosa. Las tareas derivadas del cierre se crean en la misma transacción y llevan una clave de origen única, de modo que reenviar la operación o procesar una cola antigua no las duplica.
+
+Los estados de comunicación son deliberadamente conservadores: *preparado* y *declarado enviado manualmente*. Abrir un enlace de WhatsApp no envía el mensaje ni acredita su entrega; el estado *entregado* solo podría escribirlo una integración que lo pruebe, y hoy no existe ninguna.
+
+## Preparación del botiquín
+
+`GET /api/inventory/kit` calcula faltantes sobre las existencias **del servidor**, no sobre la copia del dispositivo, y separa tres cosas: lo disponible, el mínimo del producto y lo que exige el plan del día. Declara además cuántas visitas no tienen prestaciones planificadas, para que una lista corta no se lea como tranquilizadora. Planificar prestaciones no cobra ni descuenta nada.
 
 ## Guardado y funcionamiento sin conexión
 
@@ -37,6 +75,14 @@ Cada operación utiliza un UUID estable, un hash de sus datos y una transacción
 
 La transacción cubre nota clínica, fotos, consumo de stock, cobro, pago y estado. Los cobros tradicionales también bloquean la misma cita/factura para evitar carreras con el nuevo espacio de atención.
 
+La copia diaria declara su cobertura: cuántas visitas trajo, cuántos antecedentes por paciente, si algo quedó recortado y qué requiere conexión. Una truncación nunca debe leerse como historial completo.
+
+El centro de sincronización lista cada operación pendiente con su paciente, antigüedad, último intento y qué le pasó, distinguiendo cuatro resultados: fallo transitorio (reintentar es seguro), sesión vencida, rechazo confirmado (corregir y volver a guardar) y **resultado desconocido** (no se sabe si el servidor la aplicó, así que se reenvía el mismo identificador y no se descarta). Varias pestañas se avisan entre sí y solo una envía a la vez.
+
+Las operaciones registran `occurredAt` —hora declarada por el dispositivo, que puede venir de un reloj desajustado— y `receivedAt`, la del servidor. Se guardan separadas porque solo la segunda es comprobable, y los tiempos del cliente no ordenan por sí solos decisiones de dinero o inventario.
+
+Una versión nueva de la aplicación no reemplaza a la que controla pestañas abiertas mientras queden guardados pendientes: el cambio se aplica cuando la cola está vacía.
+
 **Límites deliberados:** la copia es de la jornada preparada, no de toda la base. Una jornada antigua se identifica como tal. Hace falta abrir la aplicación para sincronizar; no se promete sincronización con el navegador cerrado. Una sesión vencida exige volver a iniciar con la misma cuenta. Los controles nuevos, documentos PDF del servidor y proveedores de pago requieren señal. Un pago registrado offline no ejecuta un cobro bancario: registra dinero ya recibido.
 
 ## Métricas operativas
@@ -45,7 +91,13 @@ Hoy muestra visitas por atender/completadas, saldo de los cobros de esas visitas
 
 ## Componentes y endpoints
 
-- `src/components/visits/`: jornada, espacio de atención, resumen y shell offline.
+- `src/components/visits/`: jornada, espacio de atención (controlador `useVisitDraft` + vistas `VisitHeader`, `ClinicalNote`, `SuppliesEditor`, `VisitHistory`, `VisitCheckout`), centro de sincronización, cobertura, pendientes y resumen.
+- `src/components/layout/MobileNavigation.tsx`: barra inferior por permisos; `src/components/common/SyncStatus.tsx`: estado real de los datos.
+- `src/lib/timeline.ts`: cronología del paciente con paginación por cursor.
+- `src/lib/services.ts`: resolución de prestaciones y precios contra el catálogo.
+- `src/lib/routes.ts`: paradas, orden del recorrido y domicilios guardados.
+- `src/lib/followups.ts` y `src/lib/kit.ts`: pendientes derivados del cierre y faltantes del botiquín.
+- `src/lib/features.ts`: banderas de función para el despliegue gradual.
 - `src/lib/visits.ts`: lectura de jornada/ficha limitada por rol y veterinario.
 - `src/lib/save-visit.ts`: transacción clínica/stock/cobro y comprobante de idempotencia.
 - `src/lib/field-storage.ts`: almacenamiento local, cola y sincronización.
@@ -53,13 +105,25 @@ Hoy muestra visitas por atender/completadas, saldo de los cobros de esas visitas
 - `GET /api/jornada`: jornada del día.
 - `GET /api/visits/:id`: contexto de visita para el usuario autorizado.
 - `POST /api/visits/:id/sync`: operación validada; exige que `X-Field-User` coincida con la sesión.
+- `GET /api/patients/:id/timeline`: cronología paginada y filtrada por rol.
+- `GET|POST|DELETE /api/patients/:id/alerts`: alertas del paciente; retirar marca resuelta, no borra.
+- `GET|POST /api/services` y `GET|POST /api/clinical-templates`: catálogo y plantillas.
+- `GET|POST|PUT /api/routes`: recorrido del día, paradas y reordenación.
+- `GET|POST|PUT /api/tasks` y `GET|POST /api/communications`: pendientes y comunicaciones declaradas.
+- `GET|PUT /api/inventory/kit`: faltantes del botiquín y prestaciones previstas por cita.
 - Los endpoints existentes de pacientes, responsables, citas, inventario, documentos y pagos siguen operativos.
 
 ## Instalación y despliegue
 
 Configurar conexión PostgreSQL (`DATABASE_URL`; pooler con `prepare:false`), conexión directa para migración (`DIRECT_URL`), autenticación (`BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`). Mercado Pago y Sentry son integraciones opcionales según sus variables de entorno.
 
-Respaldar y aplicar `docs/migrations/2026-09-16-operacion-domicilio.sql` antes de desplegar. Añade `started_at`, `completed_at`, `no_charge`, `visit_operations` e índices por cita. No es necesario borrar datos ni recrear usuarios para este cambio. El cierre antiguo de cuentas de tutores tiene su propia migración y no se ejecuta automáticamente.
+Respaldar y aplicar, en orden, `docs/migrations/2026-09-16-operacion-domicilio.sql` y `docs/migrations/2026-09-18-experiencia-veterinaria.sql` antes de desplegar. La segunda es aditiva: agrega plantillas, alertas, catálogo de prestaciones, domicilios, recorridos, pendientes y comunicaciones, más columnas con valor por omisión. No borra ni reescribe datos.
+
+Para desactivar una interfaz nueva se usan banderas de función (`src/lib/features.ts`, variables `PUBLIC_FEATURE_*` con el valor `off`), **nunca borrando sus tablas**: una tabla vacía se vuelve a llenar, una eliminada se lleva por delante lo ya registrado.
+
+`npm run db:seed-catalog` carga un catálogo mínimo de prestaciones y las tres plantillas. Escribe en la base real y sus precios son marcadores de posición: revisarlos con el veterinario antes del piloto.
+
+La primera migración añade `started_at`, `completed_at`, `no_charge`, `visit_operations` e índices por cita. No es necesario borrar datos ni recrear usuarios para este cambio. El cierre antiguo de cuentas de tutores tiene su propia migración y no se ejecuta automáticamente.
 
 ## Verificación manual en una base de prueba
 
@@ -72,4 +136,21 @@ Respaldar y aplicar `docs/migrations/2026-09-16-operacion-domicilio.sql` antes d
 7. Abrir una segunda pestaña; cerrar sesión en la primera. La jornada anterior debe dejar de mostrarse y no volver a activar la cuenta vieja.
 8. Comprobar descarga de receta/laboratorio/consentimiento y control preseleccionado con conexión.
 
-Las pruebas automatizadas cubren contratos, permisos, horario, cola, idempotencia y transacciones simuladas. La prueba de navegador con fixtures verifica la interfaz móvil y service worker; no sustituye probar la migración y los efectos transaccionales contra PostgreSQL de staging.
+9. Abrir una visita en un teléfono de 360–390 px: comprobar que la barra inferior no tapa el botón de cierre, que el teclado no oculta los campos y que el zoom del navegador no esconde acciones.
+10. Configurar el dispositivo en otra zona horaria y comparar Hoy, la agenda y el calendario: las horas deben coincidir entre sí.
+11. Con red disponible pero API caída, abrir ficha, recetas y laboratorio: debe decir «no se pudo cargar» con reintento, nunca «no hay datos».
+12. Registrar una alerta de paciente y abrir su visita: debe aparecer en la cabecera. Cortar la API y comprobar que dice que no pudo consultarlas, no que no tiene.
+13. Recorrer la cronología paginando hasta el final con elementos de la misma fecha: sin duplicados ni elementos perdidos. Repetir con recepción: no debe ver consultas ni documentos.
+14. Cerrar una visita con una prestación del catálogo y reenviar la misma operación: una sola nota, un solo consumo, un solo cobro y una sola línea de prestación.
+15. Intentar cobrar esa misma cita desde facturación general: debe rechazarla por cobro activo.
+16. Cambiar el precio de la prestación después de cerrada: la atención histórica conserva el importe cobrado.
+17. Cerrar con saldo pendiente y comprobar que aparece una tarea de cobro; reenviar el cierre y comprobar que sigue habiendo una sola.
+18. Agrupar dos mascotas del mismo domicilio en una parada, atribuir el traslado a una de ellas y verificar que cada paciente conserva su consulta y su cobro.
+19. Reordenar paradas y confirmar que ningún horario de cita cambió.
+20. Declarar prestaciones previstas para el día y revisar los faltantes del botiquín: debe distinguir el faltante por mínimo del que exige el plan, y declarar las visitas sin plan.
+21. Cortar la red durante un envío, recuperar señal y revisar el centro de sincronización: la operación debe aparecer como resultado desconocido y reenviarse con el mismo identificador.
+22. Abrir dos pestañas, sincronizar en una y comprobar que la otra actualiza su lista de pendientes sin recargar.
+23. Desplegar una versión nueva con guardados pendientes: no debe reemplazar la versión activa hasta que la cola quede vacía.
+24. Apagar una bandera de función (`PUBLIC_FEATURE_*=off`) y comprobar que la interfaz desaparece y los datos ya registrados siguen intactos al volver a encenderla.
+
+Las pruebas automatizadas cubren contratos, permisos, horario, cola, clasificación de fallos de sincronización, idempotencia, resolución de prestaciones, deduplicación de pendientes, cálculo de cobro y faltantes, y transacciones simuladas. No sustituyen probar la migración y los efectos transaccionales contra un PostgreSQL de staging con datos anteriores a la migración, ni la prueba en los teléfonos objetivo.

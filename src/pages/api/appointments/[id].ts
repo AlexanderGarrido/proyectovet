@@ -64,7 +64,7 @@ export const PUT: APIRoute = async ({ params, request, locals }) => {
   if ('error' in parsed) return parsed.error;
   const result = appointmentUpdateSchema.safeParse(parsed.data);
   if (!result.success) return zodError(result.error);
-  const { scheduledAt, endAt, type, status, reason, notes, veterinarianId, visitAddress } = result.data;
+  const { scheduledAt, endAt, type, status, reason, notes, veterinarianId, visitAddress, sector, travelBufferMinutes } = result.data;
 
   return db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(764210)`);
@@ -77,17 +77,22 @@ export const PUT: APIRoute = async ({ params, request, locals }) => {
     const vetId = veterinarianId ?? existing.veterinarianId;
     const [vet] = await tx.select().from(users).where(eq(users.id, vetId));
     if (!vet || !vet.isActive || vet.role !== 'veterinario') return jsonError(400, 'Veterinario inválido');
+    const buffer = travelBufferMinutes ?? existing.travelBufferMinutes;
     if (!['cancelada', 'no_asistio'].includes(status ?? existing.status)) {
+      // Mismo criterio que al crear: el colchón de traslado ocupa agenda.
       const [overlap] = await tx.select({ id: appointments.id }).from(appointments).where(and(
         ne(appointments.id, id), eq(appointments.veterinarianId, vetId),
         notInArray(appointments.status, ['cancelada', 'no_asistio']),
-        lt(appointments.scheduledAt, end), gt(appointments.endAt, start),
+        sql`${appointments.scheduledAt} - make_interval(mins => ${buffer}) < ${end}`,
+        sql`${appointments.endAt} + make_interval(mins => ${appointments.travelBufferMinutes}) > ${start}`,
       ));
-      if (overlap) return jsonError(409, 'El veterinario ya tiene una cita en ese horario');
+      if (overlap) return jsonError(409, 'El veterinario ya tiene una cita en ese horario, considerando el traslado declarado');
     }
     const [updated] = await tx.update(appointments).set({
       scheduledAt: start, endAt: end, type, status, reason, notes, veterinarianId,
       ...(visitAddress !== undefined && { visitAddress }),
+      ...(sector !== undefined && { sector }),
+      ...(travelBufferMinutes !== undefined && { travelBufferMinutes }),
     }).where(eq(appointments.id, id)).returning();
     return jsonOk(updated);
   });

@@ -3,8 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { appointments } from '../db/schema/appointments';
 import { medicalRecords } from '../db/schema/medical';
 import { payments, invoices } from '../db/schema/billing';
-import { products } from '../db/schema/inventory';
+import { products, stockMovements } from '../db/schema/inventory';
 import { visitOperations } from '../db/schema/visit-operations';
+import { visitServiceItems } from '../db/schema/services';
+import { followupTasks } from '../db/schema/followups';
+import { invoiceItems } from '../db/schema/billing';
 import type { VisitOperation } from './visit-types';
 
 const mocks = vi.hoisted(() => ({ transaction: vi.fn() }));
@@ -25,7 +28,7 @@ function transaction(reads: unknown[][], fail?: { table: unknown; kind: 'insert'
   const committed: typeof staged = [];
   const chain = (result: () => unknown): any => {
     const query: any = {};
-    for (const method of ['where', 'for', 'limit', 'returning']) query[method] = () => query;
+    for (const method of ['where', 'for', 'limit', 'returning', 'leftJoin', 'innerJoin', 'orderBy', 'onConflictDoNothing']) query[method] = () => query;
     query.then = (resolve: any, reject: any) => Promise.resolve().then(result).then(resolve, reject);
     return query;
   };
@@ -90,7 +93,9 @@ describe('saveVisit transaction orchestration', () => {
 
   it('completes an offline chain using the predecessor receipt version', async () => {
     const startedAt = '2026-09-16T13:00:00.000Z';
-    const state = transaction([[{ ...visit, updatedAt: startedAt }], [], [], [], [{ result: { visitId: 7, updatedAt: startedAt } }]]);
+    // La última lectura son las indicaciones de las prestaciones ya
+    // registradas en la cita, de donde sale el seguimiento del cierre.
+    const state = transaction([[{ ...visit, updatedAt: startedAt }], [], [], [], [{ result: { visitId: 7, updatedAt: startedAt } }], []]);
     const result = await saveVisit(user, operation({ action: 'complete', predecessorId: 'prior-start', record: { reason: 'Control' }, noCharge: true }));
     expect(result).toMatchObject({ visitId: 7, status: 'completada', recordId: 19 });
     expect(new Date(result.updatedAt).toISOString()).toBe(result.updatedAt);
@@ -118,5 +123,148 @@ describe('saveVisit transaction orchestration', () => {
     const state = transaction([[visit], [], [], [{ id: 10, total: '100', status: 'parcial' }], [{ amount: '80' }]]);
     await expect(saveVisit(user, operation({ payment: { amount: 30, method: 'efectivo' } }))).rejects.toMatchObject({ status: 409 });
     expect(state.staged.filter((write) => write.table === payments || write.table === invoices)).toEqual([]);
+  });
+});
+
+describe('Prestaciones del catálogo en el cierre', () => {
+  const servicio = { id: 5, name: 'Vacunación a domicilio', price: '18000.00', aftercare: 'Observar 48 h', isActive: true };
+
+  it('emite un solo cobro, con el precio del servidor y su línea de prestación', async () => {
+    // Lecturas: visita, comprobante, registro previo, facturas, catálogo,
+    // componentes. El cliente no envía precios: los pone el catálogo.
+    const state = transaction([[visit], [], [], [], [servicio], []]);
+    const result = await saveVisit(user, operation({ action: 'save', record: { reason: 'Vacunación' }, items: [{ serviceId: 5, quantity: 2 }] }));
+
+    const invoice = state.committed.find((w) => w.table === invoices);
+    expect(invoice?.value).toMatchObject({ total: '36000.00', subtotal: '36000.00', status: 'emitida' });
+    const lines = state.committed.filter((w) => w.table === invoiceItems);
+    expect(lines).toHaveLength(1);
+    expect(lines[0].value).toMatchObject({ description: 'Vacunación a domicilio', unitPrice: '18000.00', subtotal: '36000.00' });
+
+    // La línea de prestación es la referencia única que impide volver a
+    // cobrar esta atención desde el formulario general.
+    const item = state.committed.find((w) => w.table === visitServiceItems);
+    expect(item?.value).toMatchObject({
+      appointmentId: 7, serviceId: 5, quantity: '2',
+      unitPriceSnapshot: '18000.00', operationId: operation().id,
+    });
+    expect(result.invoiceId).toBe(19);
+  });
+
+  it('rechaza prestaciones cuando la visita ya tiene un cobro emitido', async () => {
+    const state = transaction([[visit], [], [], [{ id: 4, total: '10000.00', status: 'emitida' }], [servicio], []]);
+    await expect(saveVisit(user, operation({ items: [{ serviceId: 5, quantity: 1 }] }))).rejects.toThrow('ya tiene un cobro');
+    expect(state.committed).toHaveLength(0);
+  });
+
+  it('exige la consulta antes de descontar los insumos de una prestación', async () => {
+    // Sin nota clínica el movimiento de stock no tendría a qué referirse.
+    const components = [{ serviceId: 5, productId: 10, childServiceId: null, quantity: '1', optional: false, aftercare: null }];
+    const state = transaction([[visit], [], [], [], [servicio], components]);
+    await expect(saveVisit(user, operation({ items: [{ serviceId: 5, quantity: 1 }] }))).rejects.toThrow('Registra la consulta');
+    expect(state.committed).toHaveLength(0);
+  });
+
+  it('descuenta una sola vez un insumo declarado a mano y por la prestación', async () => {
+    const components = [{ serviceId: 5, productId: 10, childServiceId: null, quantity: '1', optional: false, aftercare: null }];
+    // La última lectura busca el botiquín del veterinario: sin ninguno
+    // asignado, el consumo sale del stock general.
+    const state = transaction([[visit], [], [], [], [servicio], components, []]);
+    await saveVisit(user, operation({
+      action: 'save',
+      record: { reason: 'Vacunación', supplies: [{ productId: 10, quantity: 1 }] },
+      items: [{ serviceId: 5, quantity: 1 }],
+    }));
+    const stockWrites = state.committed.filter((w) => w.table === products);
+    expect(stockWrites).toHaveLength(1);
+    expect(state.committed.find((w) => w.table === stockMovements)?.value.locationId).toBeNull();
+  });
+
+  it('el insumo de una prestación sale del único botiquín del veterinario', async () => {
+    const components = [{ serviceId: 5, productId: 10, childServiceId: null, quantity: '1', optional: false, aftercare: null }];
+    // Con un solo botiquín asignado no hay nada que adivinar: es donde el
+    // insumo estaba físicamente, y descontarlo del stock general dejaría
+    // el recuento del botiquín permanentemente alto.
+    const state = transaction([[visit], [], [], [], [servicio], components, [{ id: 3 }], [{ id: 3, isActive: true, assignedVetId: user.id }]]);
+    await saveVisit(user, operation({ action: 'save', record: { reason: 'Vacunación' }, items: [{ serviceId: 5, quantity: 1 }] }));
+    expect(state.committed.find((w) => w.table === stockMovements)?.value.locationId).toBe(3);
+  });
+
+  it('con dos botiquines asignados no elige por su cuenta', async () => {
+    const components = [{ serviceId: 5, productId: 10, childServiceId: null, quantity: '1', optional: false, aftercare: null }];
+    const state = transaction([[visit], [], [], [], [servicio], components, [{ id: 3 }, { id: 4 }]]);
+    await saveVisit(user, operation({ action: 'save', record: { reason: 'Vacunación' }, items: [{ serviceId: 5, quantity: 1 }] }));
+    expect(state.committed.find((w) => w.table === stockMovements)?.value.locationId).toBeNull();
+  });
+
+  it('el cierre con saldo deja un pendiente de cobro, no una atención incompleta', async () => {
+    const invoice = { id: 4, total: '20000.00', status: 'emitida' };
+    // Lecturas: visita, comprobante, registro previo, facturas, los pagos
+    // que el cierre consulta para saber si quedó saldo, y las indicaciones
+    // de las prestaciones registradas.
+    const state = transaction([[visit], [], [{ id: 3 }], [invoice], [], []]);
+    await saveVisit(user, operation({ action: 'complete' }));
+    const task = state.committed.find((w) => w.table === followupTasks);
+    expect(task?.value[0]).toMatchObject({ kind: 'cobro_pendiente', sourceKey: 'visit:7:cobro' });
+  });
+
+  it('conserva el seguimiento cuando el cierre llega después del cobro', async () => {
+    // Flujo habitual en dos pasos: primero se guarda con la prestación (que
+    // emite el cobro), después se cierra. La operación de cierre ya no trae
+    // prestaciones, así que las indicaciones se leen de lo registrado.
+    const invoice = { id: 4, total: '18000.00', status: 'pagada' };
+    const state = transaction([
+      [visit], [], [{ id: 3 }], [invoice],
+      [{ amount: '18000.00' }],
+      [{ aftercare: 'Observar el sitio de aplicación 48 h' }],
+    ]);
+    await saveVisit(user, operation({ action: 'complete' }));
+    const task = state.committed.find((w) => w.table === followupTasks);
+    expect(task?.value[0]).toMatchObject({ kind: 'seguimiento', sourceKey: 'visit:7:seguimiento' });
+  });
+
+  it('no deja marcar sin costo una visita que ya tiene cobro emitido', async () => {
+    const state = transaction([[visit], [], [], [{ id: 4, total: '10000.00', status: 'emitida' }]]);
+    await expect(saveVisit(user, operation({ action: 'save', noCharge: true, payment: undefined })))
+      .rejects.toThrow('ya tiene un cobro emitido');
+    expect(state.committed).toHaveLength(0);
+  });
+
+  it('una segunda nota sobre la misma cita queda enlazada como adenda', async () => {
+    const state = transaction([[visit], [], [{ id: 3 }], []]);
+    await saveVisit(user, operation({ action: 'save', record: { reason: 'Corrección de la nota' } }));
+    expect(state.committed.find((w) => w.table === medicalRecords)?.value.amendsRecordId).toBe(3);
+  });
+
+  it('registra la hora declarada por el dispositivo junto a la del servidor', async () => {
+    const occurredAt = '2026-09-16T09:00:00.000Z';
+    const state = transaction([[visit], [], [], []]);
+    const result = await saveVisit(user, operation({ action: 'save', occurredAt, charge: { description: 'Atención', amount: 1000 } }));
+    const receipt = state.committed.find((w) => w.table === visitOperations);
+    expect(receipt?.value.occurredAt).toEqual(new Date(occurredAt));
+    expect(receipt?.value.receivedAt).toBeInstanceOf(Date);
+    expect(result.receivedAt).toBeTruthy();
+  });
+});
+
+describe('Adenda sobre una visita cerrada', () => {
+  const cerrada = { ...visit, status: 'completada' };
+
+  it('guarda un registro nuevo enlazado al original, sin tocar la nota anterior', async () => {
+    // Lecturas: visita, comprobante, registro previo, facturas y la
+    // comprobación de que el registro corregido es de esta visita.
+    const state = transaction([[cerrada], [], [{ id: 3 }], [], [{ id: 3 }]]);
+    await saveVisit(user, operation({ action: 'save', record: { reason: 'Adenda', observations: 'Se corrige la dosis', amendsRecordId: 3 } }));
+    const saved = state.committed.filter((w) => w.table === medicalRecords);
+    expect(saved).toHaveLength(1);
+    expect(saved[0].kind).toBe('insert');
+    expect(saved[0].value.amendsRecordId).toBe(3);
+  });
+
+  it('rechaza una adenda que apunta a la nota de otra visita', async () => {
+    const state = transaction([[cerrada], [], [{ id: 3 }], [], []]);
+    await expect(saveVisit(user, operation({ action: 'save', record: { reason: 'Adenda', observations: 'x', amendsRecordId: 99 } })))
+      .rejects.toThrow('no pertenece a esta visita');
+    expect(state.committed).toHaveLength(0);
   });
 });

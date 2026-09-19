@@ -56,6 +56,15 @@ export const appointments = pgTable('appointments', {
   reason: varchar('reason', { length: 255 }),
   notes: text('notes'),
   visitAddress: varchar('visit_address', { length: 500 }),
+  // Sector operativo y colchón de traslado, declarados a mano. No salen
+  // de ningún proveedor de rutas: la agenda tiene que seguir funcionando
+  // sin depender de un servicio externo.
+  sector: varchar('sector', { length: 80 }),
+  travelBufferMinutes: integer('travel_buffer_minutes').notNull().default(0),
+  // Parada del recorrido a la que pertenece. Nullable: las citas
+  // anteriores a esta función —y cualquier cita suelta— siguen siendo
+  // válidas sin parada.
+  routeStopId: integer('route_stop_id'),
   reminderSent: boolean('reminder_sent').notNull().default(false),
   startedAt: timestamp('started_at'),
   completedAt: timestamp('completed_at'),
@@ -68,6 +77,7 @@ export const appointments = pgTable('appointments', {
   idxPatientId: index('idx_appointments_patient').on(t.patientId),
   idxVetId: index('idx_appointments_vet').on(t.veterinarianId),
   idxOwnerId: index('idx_appt_owner_id').on(t.ownerId),
+  idxRouteStop: index('idx_appt_route_stop').on(t.routeStopId),
 }));
 
 export const veterinarianSchedules = pgTable('veterinarian_schedules', {

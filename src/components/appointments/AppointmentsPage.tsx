@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import { List, CalendarDays } from 'lucide-react';
+import { List, CalendarDays, Route } from 'lucide-react';
 import { AppointmentList } from './AppointmentList';
 import { AppointmentCalendar } from './AppointmentCalendar';
+import { RoutePlanner } from './RoutePlanner';
+import { features } from '../../lib/features';
 
 export function AppointmentsPage() {
-  const [view, setView] = useState<'list' | 'calendar'>('list');
+  const [view, setView] = useState<'list' | 'calendar' | 'route'>('list');
 
   return (
     <div className="space-y-4">
@@ -28,9 +30,20 @@ export function AppointmentsPage() {
           <CalendarDays className="h-4 w-4" />
           Calendario
         </button>
+        {features.recorrido && <button
+          onClick={() => setView('route')}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+            view === 'route' ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          <Route className="h-4 w-4" />
+          Recorrido
+        </button>}
       </div>
 
-      {view === 'list' ? <AppointmentList /> : <AppointmentCalendar />}
+      {view === 'list' && <AppointmentList />}
+      {view === 'calendar' && <AppointmentCalendar />}
+      {view === 'route' && features.recorrido && <RoutePlanner />}
     </div>
   );
 }

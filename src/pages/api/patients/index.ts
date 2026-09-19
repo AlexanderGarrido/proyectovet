@@ -21,10 +21,20 @@ export const GET: APIRoute = async ({ request, locals }) => {
   const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit') || '100')));
   const offset = (page - 1) * limit;
 
+  // La búsqueda del encabezado es el camino más corto a una ficha en terreno:
+  // muchas veces lo único que se tiene a mano es el teléfono del responsable
+  // o su apellido, no el nombre del paciente. El join con `owners` ya existe
+  // para el listado, así que ampliar el filtro no agrega consultas.
   const whereCondition = ownerId
     ? eq(patients.ownerId, Number(ownerId))
     : search
-    ? or(ilike(patients.name, `%${search}%`), ilike(patients.breed, `%${search}%`))
+    ? or(
+        ilike(patients.name, `%${search}%`),
+        ilike(patients.breed, `%${search}%`),
+        ilike(owners.firstName, `%${search}%`),
+        ilike(owners.lastName, `%${search}%`),
+        ilike(owners.phone, `%${search}%`)
+      )
     : undefined;
 
   const [result, [{ count }]] = await Promise.all([
@@ -52,7 +62,13 @@ export const GET: APIRoute = async ({ request, locals }) => {
       .orderBy(desc(patients.createdAt))
       .limit(limit)
       .offset(offset),
-    db.select({ count: sql<number>`count(*)::int` }).from(patients).where(whereCondition),
+    // El conteo repite el join: el filtro puede referirse a columnas de
+    // `owners` y sin la tabla la consulta ni siquiera es válida.
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(patients)
+      .leftJoin(owners, eq(patients.ownerId, owners.id))
+      .where(whereCondition),
   ]);
 
   return jsonOkPaginated(result, count);

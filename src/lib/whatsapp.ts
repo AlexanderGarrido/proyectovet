@@ -69,3 +69,56 @@ export const appointmentTypeLabels: Record<string, string> = {
   desparasitacion: 'Desparasitación',
   grooming: 'Grooming',
 };
+
+/**
+ * Plantillas de seguimiento para los momentos habituales de una visita a
+ * domicilio. Producen texto editable: quien envía revisa y ajusta antes de
+ * mandarlo. Abrir el enlace tampoco acredita entrega — por eso el registro
+ * de la comunicación se declara aparte y a mano.
+ */
+export interface FollowupMessageData {
+  ownerName: string;
+  patientName: string;
+  date?: string;
+  time?: string;
+  instructions?: string;
+  veterinarianName?: string;
+}
+
+export type FollowupTemplateId = 'confirmacion' | 'llegada' | 'resumen' | 'control';
+
+export const FOLLOWUP_TEMPLATES: { id: FollowupTemplateId; label: string; build: (d: FollowupMessageData) => string }[] = [
+  {
+    id: 'confirmacion',
+    label: 'Confirmar visita',
+    build: (d) => `¡Hola ${d.ownerName}! 🐾 Confirmamos la visita para ${d.patientName}` +
+      `${d.date ? ` el ${d.date}` : ''}${d.time ? ` a las ${d.time} hrs` : ''}. ` +
+      `Si necesita cambiarla, respóndanos por este chat. — ${clinic.name}`,
+  },
+  {
+    id: 'llegada',
+    label: 'Aviso de llegada',
+    build: (d) => `¡Hola ${d.ownerName}! Vamos en camino a la visita de ${d.patientName}. ` +
+      `Llegamos en unos minutos. — ${clinic.name}`,
+  },
+  {
+    id: 'resumen',
+    label: 'Resumen de la atención',
+    build: (d) => `¡Hola ${d.ownerName}! Le compartimos el resumen de la atención de ${d.patientName}` +
+      `${d.veterinarianName ? ` con ${d.veterinarianName}` : ''}.` +
+      `${d.instructions ? `\n\nIndicaciones:\n${d.instructions}` : ''}` +
+      `\n\nAnte cualquier duda, escríbanos por este chat. — ${clinic.name}`,
+  },
+  {
+    id: 'control',
+    label: 'Recordar control',
+    build: (d) => `¡Hola ${d.ownerName}! Corresponde agendar el control de ${d.patientName}` +
+      `${d.date ? ` alrededor del ${d.date}` : ''}. ` +
+      `Respóndanos y coordinamos día y hora. — ${clinic.name}`,
+  },
+];
+
+export function buildFollowupMessage(id: FollowupTemplateId, data: FollowupMessageData): string {
+  const template = FOLLOWUP_TEMPLATES.find((t) => t.id === id);
+  return template ? template.build(data) : '';
+}

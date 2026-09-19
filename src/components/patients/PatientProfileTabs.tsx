@@ -7,6 +7,10 @@ import { Badge } from '../ui/badge';
 import { Skeleton } from '../ui/skeleton';
 import { EmptyState } from '../ui/empty-state';
 import { VaccineSection } from './VaccineSection';
+import { PatientTimeline } from './PatientTimeline';
+import { PatientAlertsPanel } from './PatientAlertsPanel';
+import { ErrorState } from '../ui/error-state';
+import { features } from '../../lib/features';
 
 interface MedicalRecord {
   id: number;
@@ -72,31 +76,47 @@ interface Props {
 }
 
 export function PatientProfileTabs({ patientId, canEdit, records, appointments }: Props) {
-  const [tab, setTab] = useState('historial');
+  const [tab, setTab] = useState(features.cronologia ? 'cronologia' : 'historial');
   const [prescriptions, setPrescriptions] = useState<Prescription[] | null>(null);
   const [labOrders, setLabOrders] = useState<LabOrder[] | null>(null);
+  // Un fallo de carga se distingue de «no hay nada»: convertirlo en lista
+  // vacía hacía que una receta vigente pareciera inexistente.
+  const [failed, setFailed] = useState<{ prescriptions: boolean; labOrders: boolean }>({ prescriptions: false, labOrders: false });
 
-  useEffect(() => {
+  function loadDocuments() {
+    setFailed({ prescriptions: false, labOrders: false });
     fetch(`/api/prescriptions?patientId=${patientId}`)
-      .then((r) => r.json())
+      .then((r) => { if (!r.ok) throw new Error('recetas'); return r.json(); })
       .then(setPrescriptions)
-      .catch(() => setPrescriptions([]));
+      .catch(() => { setPrescriptions(null); setFailed((f) => ({ ...f, prescriptions: true })); });
     fetch(`/api/lab-orders?patientId=${patientId}`)
-      .then((r) => r.json())
+      .then((r) => { if (!r.ok) throw new Error('laboratorio'); return r.json(); })
       .then(setLabOrders)
-      .catch(() => setLabOrders([]));
-  }, [patientId]);
+      .catch(() => { setLabOrders(null); setFailed((f) => ({ ...f, labOrders: true })); });
+  }
+
+  useEffect(() => { loadDocuments(); }, [patientId]);
 
   return (
-    <div className="rounded-xl border bg-card p-6">
+    <div className="space-y-4">
+      <PatientAlertsPanel patientId={patientId} canEdit={canEdit} />
+      <div className="rounded-xl border bg-card p-6">
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="flex-wrap h-auto">
+          {features.cronologia && <TabsTrigger value="cronologia">Cronología</TabsTrigger>}
           <TabsTrigger value="historial">Historial ({records.length})</TabsTrigger>
           <TabsTrigger value="citas">Citas ({appointments.length})</TabsTrigger>
           <TabsTrigger value="vacunas">Vacunas</TabsTrigger>
           <TabsTrigger value="recetas">Recetas{prescriptions ? ` (${prescriptions.length})` : ''}</TabsTrigger>
           <TabsTrigger value="laboratorio">Laboratorio{labOrders ? ` (${labOrders.length})` : ''}</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="cronologia">
+          <p className="mb-3 text-sm text-muted-foreground">
+            Consultas, citas, vacunas, documentos, cobros y comunicaciones en orden, filtrables por tipo.
+          </p>
+          <PatientTimeline patientId={patientId} />
+        </TabsContent>
 
         <TabsContent value="historial">
           <div className="flex items-center justify-between mb-4">
@@ -156,7 +176,9 @@ export function PatientProfileTabs({ patientId, canEdit, records, appointments }
             <span className="text-sm text-muted-foreground">Recetas emitidas</span>
             <a href={`/recetas/nueva?patientId=${patientId}`} className="text-xs text-primary hover:underline">+ Nueva receta</a>
           </div>
-          {prescriptions === null ? (
+          {failed.prescriptions ? (
+            <ErrorState title="No se pudieron cargar las recetas" description="No sabemos si este paciente tiene recetas vigentes." onRetry={loadDocuments} />
+          ) : prescriptions === null ? (
             <div className="space-y-2">
               {[1, 2].map((i) => <Skeleton key={i} className="h-14 rounded-lg" />)}
             </div>
@@ -185,7 +207,9 @@ export function PatientProfileTabs({ patientId, canEdit, records, appointments }
             <span className="text-sm text-muted-foreground">Órdenes de laboratorio</span>
             <a href={`/ordenes/nueva?patientId=${patientId}`} className="text-xs text-primary hover:underline">+ Nueva orden</a>
           </div>
-          {labOrders === null ? (
+          {failed.labOrders ? (
+            <ErrorState title="No se pudieron cargar las órdenes de laboratorio" description="No sabemos si hay exámenes pendientes de revisar." onRetry={loadDocuments} />
+          ) : labOrders === null ? (
             <div className="space-y-2">
               {[1, 2].map((i) => <Skeleton key={i} className="h-14 rounded-lg" />)}
             </div>
@@ -209,6 +233,7 @@ export function PatientProfileTabs({ patientId, canEdit, records, appointments }
           )}
         </TabsContent>
       </Tabs>
+      </div>
     </div>
   );
 }

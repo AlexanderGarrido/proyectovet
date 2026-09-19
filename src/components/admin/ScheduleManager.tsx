@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, X, Clock, User, PawPrint, Stethoscope, FileText } from 'lucide-react';
+import { addClinicDays, clinicDateLabel, clinicDay, clinicDayRange, clinicHhmm, clinicMinutes, clinicParts, clinicWeekStart } from '../../lib/clinic-time';
 
 interface Appointment {
   id: number;
@@ -52,35 +53,13 @@ const GRID_END   = 21 * 60;  // 21:00
 const GRID_RANGE = GRID_END - GRID_START;
 const HOURS = Array.from({ length: 15 }, (_, i) => i + 7); // 7..21
 
-function timeToMinutes(date: Date) {
-  return date.getHours() * 60 + date.getMinutes();
-}
-
-function formatTime(date: Date) {
-  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-}
-
-function getWeekStart(date: Date): Date {
-  const d = new Date(date);
-  const day = d.getDay(); // 0=Sun
-  const diff = day === 0 ? -6 : 1 - day; // Monday
-  d.setDate(d.getDate() + diff);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-function addDays(date: Date, n: number): Date {
-  const d = new Date(date);
-  d.setDate(d.getDate() + n);
-  return d;
-}
-
-function formatDateLabel(date: Date) {
-  return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
-}
+// Igual que el calendario de agenda: la grilla se indexa por día
+// `YYYY-MM-DD` del horario de la clínica, no por el reloj del dispositivo.
+const formatDateLabel = (day: string) => clinicDateLabel(day, { day: 'numeric', month: 'short' });
 
 export function ScheduleManager() {
-  const [weekStart, setWeekStart] = useState<Date>(() => getWeekStart(new Date()));
+  const today = clinicDay();
+  const [weekStart, setWeekStart] = useState<string>(() => clinicWeekStart(today));
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Appointment | null>(null);
@@ -91,45 +70,34 @@ export function ScheduleManager() {
 
   async function fetchWeek() {
     setLoading(true);
-    const from = weekStart.toISOString();
-    const to = addDays(weekStart, 7).toISOString();
+    const from = clinicDayRange(weekStart).start.toISOString();
+    const to = clinicDayRange(addClinicDays(weekStart, 6)).end.toISOString();
     const res = await fetch(`/api/appointments?from=${from}&to=${to}`);
     if (res.ok) setAppointments(await res.json());
     setLoading(false);
   }
 
-  function prevWeek() { setWeekStart(d => addDays(d, -7)); }
-  function nextWeek() { setWeekStart(d => addDays(d, 7)); }
-  function goToday()  { setWeekStart(getWeekStart(new Date())); }
+  function prevWeek() { setWeekStart(d => addClinicDays(d, -7)); }
+  function nextWeek() { setWeekStart(d => addClinicDays(d, 7)); }
+  function goToday()  { setWeekStart(clinicWeekStart(clinicDay())); }
 
   // Group appointments by display day index (0=Mon..6=Sun)
   function getAppointmentsForDay(dayIdx: number): Appointment[] {
-    const dayDate = addDays(weekStart, dayIdx);
-    return appointments.filter(a => {
-      const d = new Date(a.scheduledAt);
-      return d.getFullYear() === dayDate.getFullYear() &&
-             d.getMonth()     === dayDate.getMonth() &&
-             d.getDate()      === dayDate.getDate();
-    });
+    const dayDate = addClinicDays(weekStart, dayIdx);
+    return appointments.filter(a => clinicParts(a.scheduledAt)?.day === dayDate);
   }
 
   function blockStyle(a: Appointment) {
-    const start = new Date(a.scheduledAt);
-    const end   = new Date(a.endAt);
-    const startMin = Math.max(timeToMinutes(start), GRID_START) - GRID_START;
-    const endMin   = Math.min(timeToMinutes(end),   GRID_END)   - GRID_START;
+    const startMin = Math.max(clinicMinutes(a.scheduledAt), GRID_START) - GRID_START;
+    const endMin   = Math.min(clinicMinutes(a.endAt),       GRID_END)   - GRID_START;
     const top    = (startMin / GRID_RANGE) * 100;
     const height = Math.max(((endMin - startMin) / GRID_RANGE) * 100, 1.5);
     return { top: `${top}%`, height: `${height}%` };
   }
 
-  const today = new Date();
-  const isCurrentWeek = getWeekStart(today).getTime() === weekStart.getTime();
+  const isCurrentWeek = clinicWeekStart(today) === weekStart;
 
-  const weekLabel = (() => {
-    const end = addDays(weekStart, 6);
-    return `${formatDateLabel(weekStart)} – ${formatDateLabel(end)}`;
-  })();
+  const weekLabel = `${formatDateLabel(weekStart)} – ${formatDateLabel(addClinicDays(weekStart, 6))}`;
 
   return (
     <div className="space-y-4">
@@ -156,8 +124,8 @@ export function ScheduleManager() {
         <div className="grid grid-cols-8 border-b bg-muted/50">
           <div className="p-2 text-xs text-muted-foreground text-center border-r">Hora</div>
           {DAYS_SHORT.map((d, i) => {
-            const colDate = addDays(weekStart, i);
-            const isToday = colDate.toDateString() === today.toDateString();
+            const colDate = addClinicDays(weekStart, i);
+            const isToday = colDate === today;
             return (
               <div key={i} className={`p-2 text-center border-r last:border-r-0 ${isToday ? 'bg-primary/5' : ''}`}>
                 <p className={`text-xs font-semibold ${isToday ? 'text-primary' : ''}`}>{d}</p>
@@ -187,8 +155,8 @@ export function ScheduleManager() {
           {/* Day columns */}
           {DAYS_SHORT.map((_, dayIdx) => {
             const dayAppts = getAppointmentsForDay(dayIdx);
-            const colDate  = addDays(weekStart, dayIdx);
-            const isToday  = colDate.toDateString() === today.toDateString();
+            const colDate  = addClinicDays(weekStart, dayIdx);
+            const isToday  = colDate === today;
             return (
               <div
                 key={dayIdx}
@@ -214,7 +182,7 @@ export function ScheduleManager() {
                       onClick={() => setSelected(a)}
                     >
                       <p className="text-xs font-semibold leading-tight truncate">
-                        {formatTime(new Date(a.scheduledAt))}
+                        {clinicHhmm(a.scheduledAt)}
                       </p>
                       <p className="text-xs leading-tight truncate opacity-80">{a.patientName}</p>
                     </button>
@@ -248,9 +216,9 @@ export function ScheduleManager() {
               <div className="flex items-center gap-2">
                 <Clock className="h-4 w-4 text-muted-foreground shrink-0" />
                 <span>
-                  {new Date(selected.scheduledAt).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}
+                  {clinicDateLabel(clinicParts(selected.scheduledAt)?.day ?? '', { weekday: 'long', day: 'numeric', month: 'long' })}
                   {' · '}
-                  {formatTime(new Date(selected.scheduledAt))} – {formatTime(new Date(selected.endAt))}
+                  {clinicHhmm(selected.scheduledAt)} – {clinicHhmm(selected.endAt)}
                 </span>
               </div>
 

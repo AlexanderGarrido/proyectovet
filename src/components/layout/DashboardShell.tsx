@@ -1,14 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
+import { MobileNavigation } from './MobileNavigation';
 import { Toaster } from 'sonner';
-
-interface NavItem {
-  label: string;
-  href: string;
-  icon: string;
-  section: string;
-}
+import type { NavItem } from '../../lib/permissions';
 
 interface DashboardShellProps {
   navItems: NavItem[];
@@ -66,8 +61,11 @@ export function DashboardShell({
           onMenuToggle={() => setSidebarOpen(!sidebarOpen)}
           onSidebarCollapse={() => setSidebarCollapsed((c) => !c)}
         />
-        <main className="flex-1 overflow-y-auto p-4 lg:p-6">{children}</main>
+        {/* pb-20 en móvil deja libre la altura de la barra inferior; sin
+            eso, el último control de cada pantalla queda debajo de ella. */}
+        <main className="flex-1 overflow-y-auto p-4 pb-20 lg:p-6 lg:pb-6">{children}</main>
       </div>
+      <MobileNavigation navItems={navItems} currentPath={currentPath} />
       <Toaster position="top-right" richColors closeButton />
     </div>
   );

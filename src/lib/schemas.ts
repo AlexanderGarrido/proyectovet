@@ -43,6 +43,10 @@ export const appointmentSchema = z.object({
   // SEGURIDAD: antes se leía del body crudo sin pasar por Zod (sin límite de
   // longitud ni tipo). Es el campo central de la atención a domicilio.
   visitAddress:    z.string().max(500).optional().nullable(),
+  // Sector operativo y colchón de traslado declarados a mano: la agenda a
+  // domicilio no solo ocupa el tiempo de la atención, también el del viaje.
+  sector:              z.string().max(80).optional().nullable(),
+  travelBufferMinutes: z.coerce.number().int().min(0).max(240).optional(),
 }).refine(data => new Date(data.endAt) > new Date(data.scheduledAt), {
   message: 'La hora de fin debe ser posterior a la de inicio',
   path: ['endAt'],
@@ -137,6 +141,10 @@ export const invoiceItemSchema = z.object({
   quantity:    z.coerce.number().positive('Cantidad requerida'),
   unitPrice:   z.coerce.number().nonnegative('Precio requerido'),
   productId:   z.number().int().positive().optional().nullable(),
+  // Prestación del catálogo. Cuando viene, el servidor ignora
+  // `unitPrice` y usa la tarifa vigente: el precio de una atención no
+  // puede fijarlo el navegador que envía el formulario.
+  serviceId:   z.number().int().positive().optional().nullable(),
 });
 
 export const invoiceSchema = z.object({
@@ -195,6 +203,8 @@ export const appointmentFormSchema = z.object({
   endAt:          z.string().min(1, 'Hora de fin requerida'),
   type:           z.enum(['consulta', 'vacunacion', 'cirugia', 'control', 'emergencia', 'desparasitacion', 'grooming']),
   visitAddress:   z.string().max(500).optional(),
+  sector:              z.string().max(80).optional(),
+  travelBufferMinutes: z.string().optional(),
   reason:         z.string().max(500).optional(),
   notes:          z.string().max(1000).optional(),
 });
@@ -246,6 +256,8 @@ export const appointmentUpdateSchema = z.object({
   notes:         z.string().max(1000).optional().nullable(),
   veterinarianId: z.string().optional(),
   visitAddress:  z.string().max(500).optional().nullable(),
+  sector:              z.string().max(80).optional().nullable(),
+  travelBufferMinutes: z.coerce.number().int().min(0).max(240).optional(),
 });
 export type AppointmentUpdateInput = z.infer<typeof appointmentUpdateSchema>;
 

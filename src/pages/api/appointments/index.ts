@@ -82,7 +82,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const parsed = appointmentSchema.safeParse(body.data);
   if (!parsed.success) return zodError(parsed.error);
 
-  const { patientId, ownerId, veterinarianId, scheduledAt, endAt, type, reason, notes, visitAddress } = parsed.data;
+  const { patientId, ownerId, veterinarianId, scheduledAt, endAt, type, reason, notes, visitAddress, sector, travelBufferMinutes } = parsed.data;
+  const buffer = travelBufferMinutes ?? 0;
 
   return db.transaction(async (tx) => {
     // Serialize schedule writers across creation and rescheduling.
@@ -92,15 +93,20 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const [vet] = await tx.select().from(users).where(eq(users.id, veterinarianId));
     if (!vet || !vet.isActive || vet.role !== 'veterinario') return jsonError(400, 'Veterinario inválido');
     if (user!.role === 'veterinario' && user!.id !== veterinarianId) return jsonError(403, 'Solo puedes programar tu propia agenda');
+    // El solapamiento considera el traslado: dos visitas seguidas en
+    // domicilios distintos no caben juntas aunque sus horarios no se
+    // toquen por un minuto. Con colchón 0 el resultado es el de antes.
     const [overlap] = await tx.select({ id: appointments.id }).from(appointments).where(and(
       eq(appointments.veterinarianId, veterinarianId),
       notInArray(appointments.status, ['cancelada', 'no_asistio']),
-      lt(appointments.scheduledAt, new Date(endAt)), gt(appointments.endAt, new Date(scheduledAt)),
+      sql`${appointments.scheduledAt} - make_interval(mins => ${buffer}) < ${new Date(endAt)}`,
+      sql`${appointments.endAt} + make_interval(mins => ${appointments.travelBufferMinutes}) > ${new Date(scheduledAt)}`,
     ));
-    if (overlap) return jsonError(409, 'El veterinario ya tiene una cita en ese horario');
+    if (overlap) return jsonError(409, 'El veterinario ya tiene una cita en ese horario, considerando el traslado declarado');
     const [newAppt] = await tx.insert(appointments).values({
       patientId, ownerId, veterinarianId, scheduledAt: new Date(scheduledAt), endAt: new Date(endAt),
       type, reason, notes, visitAddress: visitAddress || null,
+      sector: sector || null, travelBufferMinutes: buffer,
     }).returning();
     return jsonOk(newAppt, 201);
   });

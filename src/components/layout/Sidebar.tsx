@@ -14,6 +14,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { isNavItemActive, type NavItem } from '../../lib/permissions';
 
 const iconMap: Record<string, LucideIcon> = {
   LayoutDashboard,
@@ -28,13 +29,6 @@ const iconMap: Record<string, LucideIcon> = {
   Users,
   FileSignature,
 };
-
-interface NavItem {
-  label: string;
-  href: string;
-  icon: string;
-  section: string;
-}
 
 interface SidebarProps {
   navItems: NavItem[];
@@ -138,9 +132,7 @@ export function Sidebar({
               <div className="space-y-0.5">
                 {group.items.map((item) => {
                   const Icon = iconMap[item.icon] || LayoutDashboard;
-                  const isActive =
-                    currentPath === item.href ||
-                    (item.href !== '/dashboard' && currentPath.startsWith(item.href));
+                  const isActive = isNavItemActive(item, currentPath);
 
                   return (
                     <a

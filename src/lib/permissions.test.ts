@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { hasPermission, requiresOwnershipCheck, getNavItems } from './permissions';
+import { hasPermission, requiresOwnershipCheck, getNavItems, isNavItemActive } from './permissions';
 
 // ── hasPermission ─────────────────────────────────────────────────────────────
 describe('hasPermission', () => {
@@ -92,10 +92,33 @@ describe('requiresOwnershipCheck', () => {
 describe('navegación de jornada', () => {
   it.each(['admin', 'veterinario', 'recepcionista'] as const)('ofrece cinco entradas principales a %s', (role) => {
     const items = getNavItems(role);
-    expect(items.filter((item) => item.section === 'Principal').map((item) => item.label))
-      .toEqual(['Hoy', 'Agenda', 'Pacientes', 'Botiquín', 'Cobros']);
+    expect(items.filter((item) => item.section === 'Principal').map((item) => item.href))
+      .toEqual(['/dashboard', '/citas', '/pacientes', role === 'veterinario' ? '/inventario/botiquin' : '/inventario', '/facturacion']);
+    expect(items.filter((item) => item.primary)).toHaveLength(5);
     expect(items.some((item) => ['/tutores', '/recetas', '/ordenes', '/consentimientos'].includes(item.href))).toBe(false);
     expect(hasPermission(role, 'owners', 'write')).toBe(true);
+  });
+  it('lleva al veterinario a su botiquín asignado y a los demás al inventario general', () => {
+    expect(getNavItems('veterinario').find((i) => i.icon === 'Package')).toMatchObject({ label: 'Mi botiquín', href: '/inventario/botiquin' });
+    expect(getNavItems('recepcionista').find((i) => i.icon === 'Package')).toMatchObject({ label: 'Botiquín', href: '/inventario' });
+  });
+  it('marca activa el área de inventario aunque el rol apunte a otra ruta del área', () => {
+    const vetItem = getNavItems('veterinario').find((i) => i.icon === 'Package')!;
+    const staffItem = getNavItems('admin').find((i) => i.icon === 'Package')!;
+    expect(isNavItemActive(vetItem, '/inventario/12')).toBe(true);
+    expect(isNavItemActive(staffItem, '/inventario/botiquin')).toBe(true);
+    expect(isNavItemActive(staffItem, '/inventariado')).toBe(false);
+  });
+  it('Hoy no se activa desde otras rutas', () => {
+    const hoy = getNavItems('admin').find((i) => i.href === '/dashboard')!;
+    expect(isNavItemActive(hoy, '/dashboard')).toBe(true);
+    expect(isNavItemActive(hoy, '/citas')).toBe(false);
+  });
+  it('Pacientes agrupa los documentos clínicos que ya no tienen entrada propia', () => {
+    const pacientes = getNavItems('admin').find((i) => i.href === '/pacientes')!;
+    for (const path of ['/recetas', '/ordenes/nueva', '/tutores/3', '/historial/9']) {
+      expect(isNavItemActive(pacientes, path)).toBe(true);
+    }
   });
   it('reserva configuración y reportes secundarios del menú a administración', () => {
     expect(getNavItems('admin').filter((item) => item.section !== 'Principal').map((item) => item.href)).toEqual(['/metricas', '/configuracion']);

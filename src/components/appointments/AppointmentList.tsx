@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react';
 import { Search, Plus, Calendar, Eye, MessageCircle } from 'lucide-react';
-import { format } from 'date-fns';
-import { es } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { buildWhatsappLink, buildAppointmentReminderMessage, appointmentTypeLabels } from '../../lib/whatsapp';
 import { Skeleton } from '../ui/skeleton';
 import { EmptyState } from '../ui/empty-state';
+import { clinicDateLabel, clinicHhmm, clinicParts } from '../../lib/clinic-time';
 
 interface Appointment {
   id: number;
@@ -31,8 +30,8 @@ function whatsappReminderLink(a: Appointment): string | null {
     buildAppointmentReminderMessage({
       ownerName: `${a.ownerFirstName ?? ''} ${a.ownerLastName ?? ''}`.trim() || 'tutor/a',
       patientName: a.patientName || 'su mascota',
-      appointmentDate: format(new Date(a.scheduledAt), "EEEE dd 'de' MMMM 'de' yyyy", { locale: es }),
-      appointmentTime: format(new Date(a.scheduledAt), 'HH:mm'),
+      appointmentDate: clinicDateLabel(clinicParts(a.scheduledAt)?.day ?? '', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }),
+      appointmentTime: clinicHhmm(a.scheduledAt),
       appointmentTypeLabel: appointmentTypeLabels[a.type] || a.type,
       veterinarianName: a.veterinarianName || 'nuestro equipo',
     }),
@@ -156,8 +155,8 @@ export function AppointmentList() {
               {appointments.map((a) => (
                 <tr key={a.id} className="hover:bg-muted/20 transition-colors">
                   <td className="px-4 py-3">
-                    <div className="font-medium">{format(new Date(a.scheduledAt), 'dd/MM/yyyy', { locale: es })}</div>
-                    <div className="text-xs text-muted-foreground">{format(new Date(a.scheduledAt), 'HH:mm')}</div>
+                    <div className="font-medium">{clinicDateLabel(clinicParts(a.scheduledAt)?.day ?? '', { day: '2-digit', month: '2-digit', year: 'numeric' })}</div>
+                    <div className="text-xs text-muted-foreground">{clinicHhmm(a.scheduledAt)}</div>
                   </td>
                   <td className="px-4 py-3 font-medium">{a.patientName || '—'}</td>
                   <td className="px-4 py-3 text-muted-foreground">{a.ownerFirstName} {a.ownerLastName}</td>

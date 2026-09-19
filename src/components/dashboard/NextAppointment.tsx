@@ -3,6 +3,7 @@ import { Clock, MapPin, Navigation, CalendarX } from 'lucide-react';
 import { Skeleton } from '../ui/skeleton';
 import { EmptyState } from '../ui/empty-state';
 import { googleMapsUrl, wazeUrl } from '../../lib/maps';
+import { clinicHhmm } from '../../lib/clinic-time';
 
 interface Appointment {
   id: number;
@@ -108,7 +109,7 @@ export function NextAppointment() {
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 mb-1">
               <span className="text-lg font-bold">
-                {date.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}
+                {clinicHhmm(appt.scheduledAt)}
               </span>
               <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
                 {typeLabels[appt.type] || appt.type}

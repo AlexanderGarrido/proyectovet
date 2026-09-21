@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock de la BD para que los tests no requieran MySQL
 vi.mock('../../../db', () => ({ db: {} }));
-vi.mock('../../../lib/auth', () => ({ auth: {} }));
+vi.mock('../../../lib/auth', () => ({ getAuth: () => ({}) }));
 
 import { GET as ownersGET } from '../owners/index';
 import { GET as patientsGET } from '../patients/index';

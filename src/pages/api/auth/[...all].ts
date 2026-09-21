@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
-import { auth } from '../../../lib/auth';
+import { getAuth } from '../../../lib/auth';
 
 export const ALL: APIRoute = async (ctx) => {
-  return auth.handler(ctx.request);
+  return getAuth().handler(ctx.request);
 };

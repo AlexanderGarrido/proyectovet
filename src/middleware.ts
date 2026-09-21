@@ -1,5 +1,5 @@
 import { defineMiddleware } from 'astro:middleware';
-import { auth } from './lib/auth';
+import { getAuth } from './lib/auth';
 import { rateLimit } from './lib/rateLimit';
 import { jsonError } from './lib/http';
 
@@ -70,7 +70,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
   // Allow public routes
   if (isPublicRoute(pathname)) {
     try {
-      const session = await auth.api.getSession({
+      const session = await getAuth().api.getSession({
         headers: context.request.headers,
       });
       if (session && ['admin', 'veterinario', 'recepcionista'].includes((session.user as any).role) && (session.user as any).isActive !== false) {
@@ -85,7 +85,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
   // Protected routes: require authentication
   try {
-    const session = await auth.api.getSession({
+    const session = await getAuth().api.getSession({
       headers: context.request.headers,
     });
 

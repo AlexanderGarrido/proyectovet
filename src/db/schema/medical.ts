@@ -8,6 +8,7 @@ import {
   date,
   jsonb,
   index,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import { users } from './users';
 import { patients } from './patients';
@@ -81,14 +82,19 @@ export const vaccines = pgTable('vaccines', {
 // la base de datos como pasaría con fotos sin comprimir.
 export const medicalRecordAttachments = pgTable('medical_record_attachments', {
   id: serial('id').primaryKey(),
-  medicalRecordId: integer('medical_record_id')
-    .notNull()
-    .references(() => medicalRecords.id, { onDelete: 'cascade' }),
+  medicalRecordId: integer('medical_record_id').notNull(),
   photo: text('photo').notNull(), // data URL base64, ya comprimida
   caption: varchar('caption', { length: 200 }),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 }, (t) => ({
   idxMedicalRecordId: index('idx_mr_attachments_record').on(t.medicalRecordId),
+  // Nombre explícito: el automático (66 caracteres) supera el límite de 63
+  // de Postgres, que lo recorta y hace que db:push lo vea como otra FK.
+  fkMedicalRecord: foreignKey({
+    name: 'mr_attachments_medical_record_id_fk',
+    columns: [t.medicalRecordId],
+    foreignColumns: [medicalRecords.id],
+  }).onDelete('cascade'),
 }));
 
 export type MedicalRecord = typeof medicalRecords.$inferSelect;

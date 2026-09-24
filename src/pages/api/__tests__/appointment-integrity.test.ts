@@ -1,15 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { PgDialect } from 'drizzle-orm/pg-core';
+import type { SQL } from 'drizzle-orm';
 
 const mocks = vi.hoisted(() => {
   const rows: unknown[][] = [];
+  const wheres: unknown[] = [];
   const insert = vi.fn(() => ({ values: vi.fn(() => ({ returning: async () => [{ id: 10 }] })) }));
   const tx = {
     execute: vi.fn(async () => undefined),
-    select: vi.fn(() => ({ from: () => ({ where: async () => rows.shift() ?? [] }) })),
+    select: vi.fn(() => ({ from: () => ({ where: async (condition: unknown) => { wheres.push(condition); return rows.shift() ?? []; } }) })),
     insert,
   };
-  return { rows, tx, transaction: vi.fn(async (callback) => callback(tx)) };
+  return { rows, wheres, tx, transaction: vi.fn(async (callback) => callback(tx)) };
 });
+
+// Drizzle desactiva el serializador de fechas de postgres-js: un Date dentro
+// de un sql`` crudo revienta en el driver ("The "string" argument must be of
+// type string... Received an instance of Date") y la cita no se guarda.
+const dateParams = (condition: unknown) =>
+  new PgDialect().sqlToQuery(condition as SQL).params.filter((p) => p instanceof Date);
 vi.mock('../../../db', () => ({ db: { transaction: mocks.transaction } }));
 import { POST } from '../appointments/index';
 import { PUT } from '../appointments/[id]';
@@ -21,7 +30,22 @@ const context = (body: unknown = base) => ({
 } as any);
 
 describe('appointment scheduling integrity', () => {
-  beforeEach(() => { vi.clearAllMocks(); mocks.rows.length = 0; });
+  beforeEach(() => { vi.clearAllMocks(); mocks.rows.length = 0; mocks.wheres.length = 0; });
+  it('sends the create overlap check without raw Date parameters', async () => {
+    mocks.rows.push([{ ownerId: 2 }], [{ role: 'veterinario', isActive: true }], [{ id: 9 }]);
+    expect((await POST(context())).status).toBe(409);
+    expect(dateParams(mocks.wheres[2])).toEqual([]);
+  });
+  it('sends the reschedule overlap check without raw Date parameters', async () => {
+    mocks.rows.push(
+      [{ veterinarianId: 'vet', status: 'pendiente', travelBufferMinutes: 0, scheduledAt: new Date(base.scheduledAt), endAt: new Date(base.endAt) }],
+      [{ role: 'veterinario', isActive: true }],
+      [{ id: 9 }],
+    );
+    const res = await PUT({ ...context({ scheduledAt: '2026-09-16T13:30:00Z', endAt: '2026-09-16T14:30:00Z' }), params: { id: '10' } });
+    expect(res.status).toBe(409);
+    expect(dateParams(mocks.wheres[2])).toEqual([]);
+  });
   it('rejects invalid timestamps before touching the database', async () => {
     expect((await POST(context({ ...base, scheduledAt: 'invalid' }))).status).toBe(400);
     expect(mocks.transaction).not.toHaveBeenCalled();

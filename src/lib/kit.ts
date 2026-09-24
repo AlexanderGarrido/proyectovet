@@ -59,7 +59,7 @@ export async function loadKit(user: { id: string; role: string }, day: string): 
   const visits = await db.select({ id: appointments.id })
     .from(appointments)
     .where(and(
-      sql`${appointments.scheduledAt} >= ${start} AND ${appointments.scheduledAt} < ${end}`,
+      sql`${appointments.scheduledAt} >= ${start.toISOString()} AND ${appointments.scheduledAt} < ${end.toISOString()}`,
       user.role === 'veterinario' ? eq(appointments.veterinarianId, user.id) : undefined,
       sql`${appointments.status} NOT IN ('cancelada', 'no_asistio', 'completada')`,
     ))

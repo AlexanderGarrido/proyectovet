@@ -96,11 +96,13 @@ export const POST: APIRoute = async ({ request, locals }) => {
     // El solapamiento considera el traslado: dos visitas seguidas en
     // domicilios distintos no caben juntas aunque sus horarios no se
     // toquen por un minuto. Con colchón 0 el resultado es el de antes.
+    // Las fechas van como ISO, igual que Drizzle mapea las columnas
+    // timestamp: un Date crudo dentro de sql`` revienta en postgres-js.
     const [overlap] = await tx.select({ id: appointments.id }).from(appointments).where(and(
       eq(appointments.veterinarianId, veterinarianId),
       notInArray(appointments.status, ['cancelada', 'no_asistio']),
-      sql`${appointments.scheduledAt} - make_interval(mins => ${buffer}) < ${new Date(endAt)}`,
-      sql`${appointments.endAt} + make_interval(mins => ${appointments.travelBufferMinutes}) > ${new Date(scheduledAt)}`,
+      sql`${appointments.scheduledAt} - make_interval(mins => ${buffer}) < ${new Date(endAt).toISOString()}`,
+      sql`${appointments.endAt} + make_interval(mins => ${appointments.travelBufferMinutes}) > ${new Date(scheduledAt).toISOString()}`,
     ));
     if (overlap) return jsonError(409, 'El veterinario ya tiene una cita en ese horario, considerando el traslado declarado');
     const [newAppt] = await tx.insert(appointments).values({

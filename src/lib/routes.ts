@@ -48,7 +48,7 @@ export async function loadRoute(veterinarianId: string, day: string): Promise<Ro
     .innerJoin(owners, eq(appointments.ownerId, owners.id))
     .where(and(
       eq(appointments.veterinarianId, veterinarianId),
-      sql`${appointments.scheduledAt} >= ${start} AND ${appointments.scheduledAt} < ${end}`,
+      sql`${appointments.scheduledAt} >= ${start.toISOString()} AND ${appointments.scheduledAt} < ${end.toISOString()}`,
     ))
     .orderBy(asc(appointments.scheduledAt))
     .limit(150);

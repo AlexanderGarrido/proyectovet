@@ -83,8 +83,8 @@ export const PUT: APIRoute = async ({ params, request, locals }) => {
       const [overlap] = await tx.select({ id: appointments.id }).from(appointments).where(and(
         ne(appointments.id, id), eq(appointments.veterinarianId, vetId),
         notInArray(appointments.status, ['cancelada', 'no_asistio']),
-        sql`${appointments.scheduledAt} - make_interval(mins => ${buffer}) < ${end}`,
-        sql`${appointments.endAt} + make_interval(mins => ${appointments.travelBufferMinutes}) > ${start}`,
+        sql`${appointments.scheduledAt} - make_interval(mins => ${buffer}) < ${end.toISOString()}`,
+        sql`${appointments.endAt} + make_interval(mins => ${appointments.travelBufferMinutes}) > ${start.toISOString()}`,
       ));
       if (overlap) return jsonError(409, 'El veterinario ya tiene una cita en ese horario, considerando el traslado declarado');
     }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { FileText, Calendar, FlaskConical } from 'lucide-react';
+import { FileText, Calendar, FlaskConical, FileSignature } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../ui/tabs';
@@ -42,6 +42,13 @@ interface LabOrder {
   results: string | null;
 }
 
+interface Consent {
+  id: number;
+  type: string;
+  signedByName: string;
+  createdAt: string;
+}
+
 const typeLabels: Record<string, string> = {
   consulta: 'Consulta', vacunacion: 'Vacunación', cirugia: 'Cirugía',
   control: 'Control', emergencia: 'Emergencia', grooming: 'Grooming', desparasitacion: 'Desparasitación',
@@ -71,57 +78,98 @@ const labStatusColors: Record<string, string> = {
 interface Props {
   patientId: number;
   canEdit: boolean;
+  canWriteAppointments: boolean;
+  canWritePrescriptions: boolean;
+  canWriteLabOrders: boolean;
+  canWriteConsents: boolean;
+  canReadPrescriptions: boolean;
+  canReadLabOrders: boolean;
+  canReadConsents: boolean;
   records: MedicalRecord[];
   appointments: Appointment[];
 }
 
-export function PatientProfileTabs({ patientId, canEdit, records, appointments }: Props) {
-  const [tab, setTab] = useState(features.cronologia ? 'cronologia' : 'historial');
+const SECTIONS = ['actividad', 'consultas', 'citas', 'vacunas', 'documentos'] as const;
+type Section = typeof SECTIONS[number];
+
+function sectionFromUrl(canViewDocuments: boolean): Section {
+  if (typeof window === 'undefined') return features.cronologia ? 'actividad' : 'consultas';
+  const requested = new URLSearchParams(window.location.search).get('seccion');
+  if (requested === 'historial') return 'consultas';
+  if (requested && SECTIONS.includes(requested as Section) && (requested !== 'actividad' || features.cronologia) && (requested !== 'documentos' || canViewDocuments)) return requested as Section;
+  return features.cronologia ? 'actividad' : 'consultas';
+}
+
+export function PatientProfileTabs({ patientId, canEdit, canWriteAppointments, canWritePrescriptions, canWriteLabOrders, canWriteConsents, canReadPrescriptions, canReadLabOrders, canReadConsents, records, appointments }: Props) {
+  const canViewDocuments = canReadPrescriptions || canReadLabOrders || canReadConsents || canWriteConsents;
+  const [tab, setTab] = useState<Section>(features.cronologia ? 'actividad' : 'consultas');
   const [prescriptions, setPrescriptions] = useState<Prescription[] | null>(null);
   const [labOrders, setLabOrders] = useState<LabOrder[] | null>(null);
+  const [consents, setConsents] = useState<Consent[] | null>(null);
   // Un fallo de carga se distingue de «no hay nada»: convertirlo en lista
   // vacía hacía que una receta vigente pareciera inexistente.
-  const [failed, setFailed] = useState<{ prescriptions: boolean; labOrders: boolean }>({ prescriptions: false, labOrders: false });
+  const [failed, setFailed] = useState<{ prescriptions: boolean; labOrders: boolean; consents: boolean }>({ prescriptions: false, labOrders: false, consents: false });
 
   function loadDocuments() {
-    setFailed({ prescriptions: false, labOrders: false });
-    fetch(`/api/prescriptions?patientId=${patientId}`)
+    setFailed({ prescriptions: false, labOrders: false, consents: false });
+    if (canReadPrescriptions) fetch(`/api/prescriptions?patientId=${patientId}`)
       .then((r) => { if (!r.ok) throw new Error('recetas'); return r.json(); })
       .then(setPrescriptions)
       .catch(() => { setPrescriptions(null); setFailed((f) => ({ ...f, prescriptions: true })); });
-    fetch(`/api/lab-orders?patientId=${patientId}`)
+    if (canReadLabOrders) fetch(`/api/lab-orders?patientId=${patientId}`)
       .then((r) => { if (!r.ok) throw new Error('laboratorio'); return r.json(); })
       .then(setLabOrders)
       .catch(() => { setLabOrders(null); setFailed((f) => ({ ...f, labOrders: true })); });
+    if (canReadConsents) fetch(`/api/consents?patientId=${patientId}`)
+      .then((r) => { if (!r.ok) throw new Error('consentimientos'); return r.json(); })
+      .then(setConsents)
+      .catch(() => { setConsents(null); setFailed((f) => ({ ...f, consents: true })); });
   }
 
   useEffect(() => { loadDocuments(); }, [patientId]);
+  useEffect(() => {
+    const sync = () => setTab(sectionFromUrl(canViewDocuments));
+    sync();
+    window.addEventListener('popstate', sync);
+    return () => window.removeEventListener('popstate', sync);
+  }, [canViewDocuments]);
+
+  function changeTab(value: string) {
+    const next = value as Section;
+    setTab(next);
+    const url = new URL(window.location.href);
+    url.searchParams.set('seccion', next);
+    window.history.pushState(null, '', url);
+  }
 
   return (
     <div className="space-y-4">
       <PatientAlertsPanel patientId={patientId} canEdit={canEdit} />
-      <div className="rounded-xl border bg-card p-6">
-      <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="flex-wrap h-auto">
-          {features.cronologia && <TabsTrigger value="cronologia">Cronología</TabsTrigger>}
-          <TabsTrigger value="historial">Historial ({records.length})</TabsTrigger>
-          <TabsTrigger value="citas">Citas ({appointments.length})</TabsTrigger>
+      <div className="rounded-xl border bg-card p-4 sm:p-6">
+        <Tabs value={tab} onValueChange={changeTab}>
+        <div className="mb-4">
+          <h2 className="text-lg font-semibold">Atención e historial</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Todo lo registrado sobre este paciente, organizado por tipo.</p>
+        </div>
+        <TabsList aria-label="Secciones de la ficha" className="flex h-auto w-full justify-start gap-1 overflow-x-auto whitespace-nowrap border-b bg-transparent p-0 pb-2">
+          {features.cronologia && <TabsTrigger value="actividad">Actividad</TabsTrigger>}
+          <TabsTrigger value="consultas">Consultas</TabsTrigger>
+          <TabsTrigger value="citas">Citas</TabsTrigger>
           <TabsTrigger value="vacunas">Vacunas</TabsTrigger>
-          <TabsTrigger value="recetas">Recetas{prescriptions ? ` (${prescriptions.length})` : ''}</TabsTrigger>
-          <TabsTrigger value="laboratorio">Laboratorio{labOrders ? ` (${labOrders.length})` : ''}</TabsTrigger>
+          {canViewDocuments && <TabsTrigger value="documentos">Documentos</TabsTrigger>}
         </TabsList>
 
-        <TabsContent value="cronologia">
+        <TabsContent value="actividad">
           <p className="mb-3 text-sm text-muted-foreground">
-            Consultas, citas, vacunas, documentos, cobros y comunicaciones en orden, filtrables por tipo.
+            Consultas, citas, vacunas y documentos en orden cronológico.
           </p>
           <PatientTimeline patientId={patientId} />
         </TabsContent>
 
-        <TabsContent value="historial">
-          <div className="flex items-center justify-between mb-4">
-            <span className="text-sm text-muted-foreground">Registros médicos</span>
-            <a href={`/historial/nuevo?patientId=${patientId}`} className="text-xs text-primary hover:underline">+ Nuevo registro</a>
+        <TabsContent value="consultas">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+            <span className="text-sm text-muted-foreground">Últimas consultas registradas</span>
+            {canEdit && <a href={`/historial/nuevo?patientId=${patientId}`} className="text-sm font-medium text-primary hover:underline">Registrar consulta</a>}
           </div>
           {records.length === 0 ? (
             <EmptyState icon={FileText} title="Sin registros médicos" />
@@ -138,12 +186,13 @@ export function PatientProfileTabs({ patientId, canEdit, records, appointments }
               ))}
             </div>
           )}
+          {features.cronologia && records.length === 30 && <p className="mt-4 text-sm text-muted-foreground">Se muestran las 30 consultas más recientes. La sección Actividad permite consultar las anteriores.</p>}
         </TabsContent>
 
         <TabsContent value="citas">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
             <span className="text-sm text-muted-foreground">Citas registradas</span>
-            <a href={`/citas/nueva?patientId=${patientId}`} className="text-xs text-primary hover:underline">+ Nueva cita</a>
+            {canWriteAppointments && <a href={`/citas/nueva?patientId=${patientId}`} className="text-sm font-medium text-primary hover:underline">Agendar cita</a>}
           </div>
           {appointments.length === 0 ? (
             <EmptyState icon={Calendar} title="Sin citas registradas" />
@@ -163,18 +212,18 @@ export function PatientProfileTabs({ patientId, canEdit, records, appointments }
               ))}
             </div>
           )}
+          {features.cronologia && appointments.length === 30 && <p className="mt-4 text-sm text-muted-foreground">Se muestran las 30 citas más recientes. La sección Actividad permite consultar las anteriores.</p>}
         </TabsContent>
 
-        <TabsContent value="vacunas" className="mt-0">
-          <div className="-m-6">
-            <VaccineSection patientId={patientId} canEdit={canEdit} />
-          </div>
+        <TabsContent value="vacunas">
+            <VaccineSection patientId={patientId} canEdit={canEdit} embedded />
         </TabsContent>
 
-        <TabsContent value="recetas">
-          <div className="flex items-center justify-between mb-4">
+        <TabsContent value="documentos" className="space-y-7">
+          {canReadPrescriptions && <section aria-label="Recetas">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
             <span className="text-sm text-muted-foreground">Recetas emitidas</span>
-            <a href={`/recetas/nueva?patientId=${patientId}`} className="text-xs text-primary hover:underline">+ Nueva receta</a>
+            {canWritePrescriptions && <a href={`/recetas/nueva?patientId=${patientId}`} className="text-sm font-medium text-primary hover:underline">Nueva receta</a>}
           </div>
           {failed.prescriptions ? (
             <ErrorState title="No se pudieron cargar las recetas" description="No sabemos si este paciente tiene recetas vigentes." onRetry={loadDocuments} />
@@ -200,12 +249,12 @@ export function PatientProfileTabs({ patientId, canEdit, records, appointments }
               ))}
             </div>
           )}
-        </TabsContent>
+          </section>}
 
-        <TabsContent value="laboratorio">
-          <div className="flex items-center justify-between mb-4">
+          {canReadLabOrders && <section aria-label="Laboratorio" className="border-t pt-6">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
             <span className="text-sm text-muted-foreground">Órdenes de laboratorio</span>
-            <a href={`/ordenes/nueva?patientId=${patientId}`} className="text-xs text-primary hover:underline">+ Nueva orden</a>
+            {canWriteLabOrders && <a href={`/ordenes/nueva?patientId=${patientId}`} className="text-sm font-medium text-primary hover:underline">Solicitar examen</a>}
           </div>
           {failed.labOrders ? (
             <ErrorState title="No se pudieron cargar las órdenes de laboratorio" description="No sabemos si hay exámenes pendientes de revisar." onRetry={loadDocuments} />
@@ -231,8 +280,31 @@ export function PatientProfileTabs({ patientId, canEdit, records, appointments }
               ))}
             </div>
           )}
+          </section>}
+
+          {canReadConsents && <section aria-label="Consentimientos" className="border-t pt-6">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+              <span className="text-sm text-muted-foreground">Consentimientos firmados</span>
+              {canWriteConsents && <a href={`/consentimientos/nueva?patientId=${patientId}`} className="text-sm font-medium text-primary hover:underline">Crear consentimiento</a>}
+            </div>
+            {failed.consents ? (
+              <ErrorState title="No se pudieron cargar los consentimientos" onRetry={loadDocuments} />
+            ) : consents === null ? (
+              <Skeleton className="h-14 rounded-lg" />
+            ) : consents.length === 0 ? (
+              <EmptyState icon={FileSignature} title="Sin consentimientos registrados" />
+            ) : (
+              <div className="space-y-2">
+                {consents.map((consent) => <a key={consent.id} href={`/api/consents/${consent.id}/pdf`} target="_blank" rel="noopener noreferrer" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3 hover:bg-muted/30">
+                  <span className="text-sm font-medium capitalize">{consent.type.replaceAll('_', ' ')}</span>
+                  <span className="text-xs text-muted-foreground">Firmado por {consent.signedByName} · {format(new Date(consent.createdAt), 'dd/MM/yyyy', { locale: es })} · Ver PDF</span>
+                </a>)}
+              </div>
+            )}
+          </section>}
+          {!canReadConsents && canWriteConsents && <a href={`/consentimientos/nueva?patientId=${patientId}`} className="text-sm font-medium text-primary hover:underline">Crear consentimiento</a>}
         </TabsContent>
-      </Tabs>
+        </Tabs>
       </div>
     </div>
   );

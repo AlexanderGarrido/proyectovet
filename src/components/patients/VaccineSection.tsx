@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Syringe, Plus, Trash2, ChevronDown, ChevronUp, AlertTriangle, Download } from 'lucide-react';
+import { Syringe, Plus, ChevronUp, Download } from 'lucide-react';
 
 interface Vaccine {
   id: number;
@@ -35,12 +35,13 @@ function nextDoseBadge(dateStr: string) {
   return <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">En {days}d</span>;
 }
 
-export function VaccineSection({ patientId, canEdit }: { patientId: number; canEdit: boolean }) {
+export function VaccineSection({ patientId, canEdit, embedded = false }: { patientId: number; canEdit: boolean; embedded?: boolean }) {
   const [vaccines, setVaccines] = useState<Vaccine[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   const [form, setForm] = useState({
     name: '', brand: '', batchNumber: '',
@@ -49,13 +50,17 @@ export function VaccineSection({ patientId, canEdit }: { patientId: number; canE
   });
 
   const load = () => {
+    setLoading(true);
+    setError('');
+    setLoadError(false);
     fetch(`/api/vaccines?patientId=${patientId}`)
-      .then((r) => r.json())
-      .then((d) => { setVaccines(d); setLoading(false); })
-      .catch(() => setLoading(false));
+      .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
+      .then((d) => setVaccines(d))
+      .catch(() => { setError('No se pudieron cargar las vacunas.'); setLoadError(true); })
+      .finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [patientId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,22 +75,19 @@ export function VaccineSection({ patientId, canEdit }: { patientId: number; canE
         setForm({ name: '', brand: '', batchNumber: '', applicationDate: new Date().toISOString().split('T')[0], nextDoseDate: '', notes: '' });
         setShowForm(false);
         load();
+      } else {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error || 'No se pudo guardar la vacuna.');
       }
+    } catch {
+      setError('No se pudo guardar la vacuna. Reintenta cuando vuelva la conexión.');
     } finally {
       setSaving(false);
     }
   };
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('¿Eliminar este registro de vacuna?')) return;
-    setDeletingId(id);
-    await fetch(`/api/vaccines/${id}`, { method: 'DELETE' });
-    setVaccines((prev) => prev.filter((v) => v.id !== id));
-    setDeletingId(null);
-  };
-
   return (
-    <div className="rounded-xl border bg-card p-6">
+    <div className={embedded ? '' : 'rounded-xl border bg-card p-6'}>
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Syringe className="h-5 w-5 text-primary" />
@@ -94,7 +96,7 @@ export function VaccineSection({ patientId, canEdit }: { patientId: number; canE
             <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{vaccines.length}</span>
           )}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <a
             href={`/api/patients/${patientId}/vaccine-card`}
             target="_blank"
@@ -114,6 +116,8 @@ export function VaccineSection({ patientId, canEdit }: { patientId: number; canE
           )}
         </div>
       </div>
+
+      {error && <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"><span>{error}</span><button type="button" onClick={load} className="font-medium underline">Recargar vacunas</button></div>}
 
       {/* Form */}
       {showForm && (
@@ -192,7 +196,7 @@ export function VaccineSection({ patientId, canEdit }: { patientId: number; canE
         <div className="space-y-2">
           {[1, 2].map((i) => <div key={i} className="h-14 rounded-lg bg-muted animate-pulse" />)}
         </div>
-      ) : vaccines.length === 0 ? (
+      ) : loadError ? null : vaccines.length === 0 ? (
         <p className="text-sm text-muted-foreground">Sin vacunas registradas.</p>
       ) : (
         <div className="space-y-2">
@@ -215,16 +219,6 @@ export function VaccineSection({ patientId, canEdit }: { patientId: number; canE
                   </div>
                   {v.notes && <p className="text-xs text-muted-foreground mt-1 italic">{v.notes}</p>}
                 </div>
-                {canEdit && (
-                  <button
-                    onClick={() => handleDelete(v.id)}
-                    disabled={deletingId === v.id}
-                    className="text-muted-foreground hover:text-red-500 transition-colors shrink-0 p-1"
-                    title="Eliminar"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                )}
               </div>
             </div>
           ))}

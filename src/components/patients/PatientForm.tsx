@@ -8,7 +8,7 @@ import { PawPrint } from 'lucide-react';
 import { patientFormSchema, type PatientFormData } from '../../lib/schemas';
 import { toast } from 'sonner';
 
-interface Owner { id: number; firstName: string; lastName: string; email?: string | null; userId?: string | null; }
+interface Owner { id: number; firstName: string; lastName: string; email?: string | null; }
 
 interface Props {
   patientId?: number;
@@ -145,19 +145,17 @@ export function PatientForm({ patientId, defaultOwnerId }: Props) {
         </div>
 
         <div className="sm:col-span-2">
-          <label className="block text-sm font-medium mb-1">Tutor *</label>
+          <label className="block text-sm font-medium mb-1">Responsable *</label>
           <select {...register('ownerId')} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30">
             <option value="">Seleccionar tutor...</option>
             {owners.map((o) => (
               <option key={o.id} value={o.id}>
                 {o.firstName} {o.lastName}
                 {o.email ? ` — ${o.email}` : ''}
-                {o.userId ? ' ✓ con cuenta' : ''}
               </option>
             ))}
           </select>
           {errors.ownerId && <p className="text-red-500 text-xs mt-1">{errors.ownerId.message}</p>}
-          <p className="text-xs text-muted-foreground mt-1">Los tutores con “✓ con cuenta” pueden ver esta mascota en su portal.</p>
           <div className="flex flex-wrap gap-3 mt-2">
             <button type="button" onClick={() => setOwnerEditor(null)} className="text-sm text-primary py-2">+ Nuevo responsable</button>
             {watch('ownerId') && <button type="button" onClick={() => setOwnerEditor(Number(watch('ownerId')))} className="text-sm text-primary py-2">Editar responsable</button>}
@@ -226,7 +224,7 @@ export function PatientForm({ patientId, defaultOwnerId }: Props) {
         <button type="submit" disabled={loading} className="bg-primary text-primary-foreground px-6 py-2 rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-60 transition-colors">
           {loading ? 'Guardando...' : patientId ? 'Actualizar Paciente' : 'Registrar Paciente'}
         </button>
-        <a href="/pacientes" className="px-6 py-2 rounded-lg text-sm font-medium border hover:bg-muted transition-colors">
+        <a href={patientId ? `/pacientes/${patientId}` : '/pacientes'} className="px-6 py-2 rounded-lg text-sm font-medium border hover:bg-muted transition-colors">
           Cancelar
         </a>
       </div>

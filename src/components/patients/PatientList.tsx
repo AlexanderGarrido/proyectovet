@@ -28,36 +28,45 @@ const speciesStyle: Record<string, { icon: LucideIcon; bg: string; fg: string; p
   otro:   { icon: PawPrint, bg: 'bg-muted',      fg: 'text-muted-foreground', pill: 'bg-muted text-muted-foreground' },
 };
 
-const FILTERS = ['todos', 'perro', 'gato', 'ave'] as const;
+const FILTERS = ['todos', 'perro', 'gato', 'ave', 'conejo', 'reptil', 'roedor', 'otro'] as const;
+const PAGE_SIZE = 24;
 
 export function PatientList() {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<string>('todos');
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [retry, setRetry] = useState(0);
 
   useEffect(() => {
-    const t = setTimeout(fetchPatients, 250);
-    return () => clearTimeout(t);
-  }, [search]);
-
-  async function fetchPatients() {
+    const controller = new AbortController();
     setLoading(true);
     setError('');
-    try {
-      const params = search ? `?search=${encodeURIComponent(search)}` : '';
-      const res = await fetch(`/api/patients${params}`);
-      if (!res.ok) throw new Error('Error al cargar pacientes');
-      setPatients(await res.json());
-    } catch {
-      setError('No se pudieron cargar los pacientes');
-    } finally {
-      setLoading(false);
-    }
-  }
+    const timer = setTimeout(async () => {
+      try {
+        const params = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE) });
+        if (search.trim()) params.set('search', search.trim());
+        if (filter !== 'todos') params.set('species', filter);
+        const res = await fetch(`/api/patients?${params}`, { signal: controller.signal });
+        if (!res.ok) throw new Error('Error al cargar pacientes');
+        const data: Patient[] = await res.json();
+        if (!controller.signal.aborted) {
+          setPatients(data);
+          setTotal(Number(res.headers.get('X-Total-Count') || data.length));
+        }
+      } catch {
+        if (!controller.signal.aborted) setError('No se pudieron cargar los pacientes');
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    }, search ? 250 : 0);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [search, filter, page, retry]);
 
-  const visible = filter === 'todos' ? patients : patients.filter((p) => p.species === filter);
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
     <div className="space-y-4">
@@ -66,11 +75,11 @@ export function PatientList() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <input
             type="text"
-            placeholder="Buscar paciente o raza..."
+            placeholder="Nombre, raza, responsable o teléfono"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             aria-label="Buscar paciente"
-            className="w-full pl-9 pr-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+            className="w-full min-h-11 pl-9 pr-4 py-2 border rounded-lg bg-card text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
         </div>
         <a
@@ -78,7 +87,7 @@ export function PatientList() {
           className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
         >
           <Plus className="h-4 w-4" />
-          Nuevo Paciente
+          Nuevo paciente
         </a>
       </div>
 
@@ -86,9 +95,9 @@ export function PatientList() {
         {FILTERS.map((f) => (
           <button
             key={f}
-            onClick={() => setFilter(f)}
+            onClick={() => { setFilter(f); setPage(1); }}
             aria-pressed={filter === f}
-            className={`text-xs px-3 py-1.5 rounded-full border capitalize transition-colors ${
+            className={`min-h-11 text-xs px-3 py-1.5 rounded-full border capitalize transition-colors ${
               filter === f
                 ? 'bg-primary/15 text-primary border-primary/40 font-medium'
                 : 'bg-card text-muted-foreground border-border hover:bg-muted'
@@ -99,8 +108,10 @@ export function PatientList() {
         ))}
       </div>
 
+      {!loading && !error && <p role="status" className="text-sm text-muted-foreground">{total === 0 ? 'Sin pacientes para esta búsqueda' : `${total} ${total === 1 ? 'paciente' : 'pacientes'} · Página ${page} de ${pages}`}</p>}
+
       {loading ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="rounded-xl border overflow-hidden">
               <Skeleton className="h-28 rounded-none" />
@@ -115,13 +126,13 @@ export function PatientList() {
         <EmptyState
           icon={AlertCircle}
           title={error}
-          action={<Button variant="outline" size="sm" onClick={fetchPatients}>Reintentar</Button>}
+          action={<Button variant="outline" size="sm" onClick={() => setRetry((n) => n + 1)}>Reintentar</Button>}
         />
-      ) : visible.length === 0 ? (
-        <EmptyState icon={PawPrint} title="No se encontraron pacientes" />
+      ) : patients.length === 0 ? (
+        <EmptyState icon={PawPrint} title="No se encontraron pacientes" description={search || filter !== 'todos' ? 'Prueba con otro nombre o cambia el filtro de especie.' : 'Registra el primer paciente para comenzar.'} action={search || filter !== 'todos' ? <Button variant="outline" size="sm" onClick={() => { setSearch(''); setFilter('todos'); setPage(1); }}>Limpiar filtros</Button> : undefined} />
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-          {visible.map((p) => {
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {patients.map((p) => {
             const st = speciesStyle[p.species] || speciesStyle.otro;
             const Icon = st.icon;
             return (
@@ -157,10 +168,10 @@ export function PatientList() {
                   </p>
                 </div>
                 <div className="flex border-t text-xs">
-                  <a href={`/pacientes/${p.id}`} className="flex-1 flex items-center justify-center gap-1.5 py-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors border-r">
-                    <FileText className="h-3.5 w-3.5" /> Historial
+                  <a href={`/pacientes/${p.id}?seccion=consultas`} className="flex-1 flex min-h-11 items-center justify-center gap-1.5 py-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors border-r">
+                    <FileText className="h-3.5 w-3.5" /> Consultas
                   </a>
-                  <a href={`/citas/nueva?patientId=${p.id}`} className="flex-1 flex items-center justify-center gap-1.5 py-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
+                  <a href={`/citas/nueva?patientId=${p.id}`} className="flex-1 flex min-h-11 items-center justify-center gap-1.5 py-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
                     <CalendarPlus className="h-3.5 w-3.5" /> Cita
                   </a>
                 </div>
@@ -169,6 +180,11 @@ export function PatientList() {
           })}
         </div>
       )}
+      {!loading && !error && total > PAGE_SIZE && <nav aria-label="Páginas de pacientes" className="flex items-center justify-center gap-3 pt-2">
+        <button type="button" disabled={page === 1} onClick={() => setPage((n) => n - 1)} className="min-h-11 rounded-lg border px-4 text-sm font-medium hover:bg-muted disabled:opacity-40">Anterior</button>
+        <span className="text-sm text-muted-foreground">{page} de {pages}</span>
+        <button type="button" disabled={page >= pages} onClick={() => setPage((n) => n + 1)} className="min-h-11 rounded-lg border px-4 text-sm font-medium hover:bg-muted disabled:opacity-40">Siguiente</button>
+      </nav>}
     </div>
   );
 }

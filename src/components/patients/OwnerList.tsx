@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Search, Users, Eye, AlertCircle, Mail, Phone, PawPrint, Link2Off } from 'lucide-react';
+import { Search, Users, Eye, AlertCircle, Mail, Phone, PawPrint } from 'lucide-react';
 import { Skeleton } from '../ui/skeleton';
 import { EmptyState } from '../ui/empty-state';
 import { Button } from '../ui/button';
-import { Badge } from '../ui/badge';
 
 interface Owner {
   id: number;
@@ -11,7 +10,6 @@ interface Owner {
   lastName: string;
   email: string | null;
   phone: string | null;
-  userId: string | null;
   petCount: number;
 }
 
@@ -94,7 +92,6 @@ export function OwnerList() {
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">Nombre</th>
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden sm:table-cell">Contacto</th>
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">Mascotas</th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">Cuenta</th>
                 <th className="px-4 py-3" />
               </tr>
             </thead>
@@ -112,15 +109,6 @@ export function OwnerList() {
                     <span className="flex items-center gap-1 text-muted-foreground">
                       <PawPrint className="h-3.5 w-3.5" /> {o.petCount}
                     </span>
-                  </td>
-                  <td className="px-4 py-3 hidden md:table-cell">
-                    {o.userId ? (
-                      <Badge variant="success">Vinculada</Badge>
-                    ) : (
-                      <Badge variant="muted" className="flex items-center gap-1 w-fit">
-                        <Link2Off className="h-3 w-3" /> Sin cuenta
-                      </Badge>
-                    )}
                   </td>
                   <td className="px-4 py-3">
                     <a href={`/tutores/${o.id}`} className="flex items-center gap-1 text-primary hover:underline text-xs">

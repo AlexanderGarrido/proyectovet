@@ -3,12 +3,11 @@ import { OwnerEditor } from '../../components/patients/OwnerEditor';
 import { hasPermission } from '../../lib/permissions';
 import DashboardLayout from '../../layouts/DashboardLayout.astro';
 import { PatientProfileTabs } from '../../components/patients/PatientProfileTabs';
-import { CoOwnersSection } from '../../components/patients/CoOwnersSection';
 import { db } from '../../db';
 import { patients, owners } from '../../db/schema/patients';
 import { medicalRecords } from '../../db/schema/medical';
 import { appointments } from '../../db/schema/appointments';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, sql } from 'drizzle-orm';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -23,7 +22,8 @@ const [patient] = await db
     dateOfBirth: patients.dateOfBirth, weight: patients.weight,
     microchipNumber: patients.microchipNumber, notes: patients.notes,
     isActive: patients.isActive, ownerId: patients.ownerId,
-    photo: patients.photo,
+    hasPhoto: sql<boolean>`${patients.photo} IS NOT NULL`,
+    updatedAt: patients.updatedAt,
     ownerFirstName: owners.firstName, ownerLastName: owners.lastName,
     ownerEmail: owners.email, ownerPhone: owners.phone,
   })
@@ -39,62 +39,63 @@ const [records, appts] = await Promise.all([
   db.select().from(appointments).where(eq(appointments.patientId, id)).orderBy(desc(appointments.scheduledAt)).limit(30),
 ]);
 
-const canEdit = user.role === 'admin' || user.role === 'veterinario';
+const canEdit = hasPermission(user.role, 'medical-records', 'write');
+const canEditPatient = hasPermission(user.role, 'patients', 'write');
 const canManageOwners = hasPermission(user.role, 'owners', 'write');
-const speciesEmoji: Record<string, string> = { perro: '🐕', gato: '🐈', ave: '🐦', reptil: '🦎', roedor: '🐭', otro: '🐾' };
+const speciesEmoji: Record<string, string> = { perro: '🐕', gato: '🐈', ave: '🐦', conejo: '🐇', reptil: '🦎', roedor: '🐭', otro: '🐾' };
 ---
 
-<DashboardLayout title={patient.name} pageTitle={`Paciente: ${patient.name}`}>
-  <div class="mb-4">
-    <a href="/pacientes" class="text-sm text-muted-foreground hover:text-foreground transition-colors">← Volver a Pacientes</a>
-  </div>
+<DashboardLayout title={patient.name} pageTitle="Ficha del paciente">
+  <nav aria-label="Ruta de navegación" class="mb-5 text-sm">
+    <a href="/pacientes" class="text-primary hover:underline focus-visible:underline">Pacientes</a>
+    <span class="mx-2 text-muted-foreground" aria-hidden="true">/</span>
+    <span aria-current="page">{patient.name}</span>
+  </nav>
 
-  <div class="grid gap-6 lg:grid-cols-3">
+  <header class="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-xl border bg-card p-4 sm:p-5">
+    <div class="flex min-w-0 items-center gap-4">
+      <div class="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-accent sm:h-20 sm:w-20">
+        {patient.hasPhoto ? <img src={`/api/patients/${id}/photo?v=${encodeURIComponent(patient.updatedAt.toISOString())}`} alt={`Foto de ${patient.name}`} class="h-full w-full object-cover" /> : <span class="text-4xl" aria-hidden="true">{speciesEmoji[patient.species] || '🐾'}</span>}
+      </div>
+      <div class="min-w-0">
+        <div class="flex flex-wrap items-center gap-2">
+          <h1 class="truncate text-2xl font-semibold tracking-tight sm:text-3xl">{patient.name}</h1>
+          {!patient.isActive && <span class="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">Inactivo</span>}
+        </div>
+        <p class="mt-1 text-sm capitalize text-muted-foreground">{patient.species}{patient.breed ? ` · ${patient.breed}` : ''}</p>
+      </div>
+    </div>
+    <div class="flex w-full flex-wrap gap-2 sm:w-auto">
+      {canEditPatient && <a href={`/pacientes/${id}/editar`} class="inline-flex min-h-11 items-center justify-center rounded-lg border px-4 text-sm font-medium hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">Editar ficha</a>}
+      {hasPermission(user.role, 'appointments', 'write') && <a href={`/citas/nueva?patientId=${id}`} class="inline-flex min-h-11 items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">Agendar cita</a>}
+    </div>
+  </header>
+
+  <div class="grid items-start gap-5 lg:grid-cols-[minmax(240px,300px)_minmax(0,1fr)]">
     <!-- Info principal -->
     <div class="lg:col-span-1 space-y-4">
-      <div class="rounded-xl border bg-card p-6">
-        <div class="flex items-start justify-between mb-4">
-          <div class="w-20 h-20 rounded-2xl overflow-hidden border bg-muted flex items-center justify-center shrink-0">
-            {patient.photo ? (
-              <img src={patient.photo} alt={patient.name} class="w-full h-full object-cover" />
-            ) : (
-              <span class="text-4xl">{speciesEmoji[patient.species] || '🐾'}</span>
-            )}
-          </div>
-          <span class={`px-2 py-1 rounded-full text-xs font-medium ${patient.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-            {patient.isActive ? 'Activo' : 'Inactivo'}
-          </span>
-        </div>
-        <h2 class="text-xl font-bold">{patient.name}</h2>
-        <p class="text-muted-foreground capitalize text-sm">{patient.species}{patient.breed ? ` · ${patient.breed}` : ''}</p>
-
-        <dl class="mt-4 space-y-2 text-sm">
-          <div class="flex justify-between"><dt class="text-muted-foreground">Sexo</dt><dd class="capitalize">{patient.sex}</dd></div>
-          {patient.color && <div class="flex justify-between"><dt class="text-muted-foreground">Color</dt><dd>{patient.color}</dd></div>}
-          {patient.weight && <div class="flex justify-between"><dt class="text-muted-foreground">Peso</dt><dd>{patient.weight} kg</dd></div>}
-          {patient.dateOfBirth && <div class="flex justify-between"><dt class="text-muted-foreground">Nacimiento</dt><dd>{format(new Date(patient.dateOfBirth), 'dd/MM/yyyy', { locale: es })}</dd></div>}
-          {patient.microchipNumber && <div class="flex justify-between"><dt class="text-muted-foreground">Microchip</dt><dd class="font-mono text-xs">{patient.microchipNumber}</dd></div>}
+      <div class="rounded-xl border bg-card p-5">
+        <h2 class="font-semibold">Datos del paciente</h2>
+        <dl class="mt-4 space-y-3 text-sm">
+          <div class="flex justify-between gap-3"><dt class="text-muted-foreground">Sexo</dt><dd class="capitalize">{patient.sex}</dd></div>
+          {patient.color && <div class="flex justify-between gap-3"><dt class="text-muted-foreground">Color</dt><dd class="text-right">{patient.color}</dd></div>}
+          {patient.weight && <div class="flex justify-between gap-3"><dt class="text-muted-foreground">Peso registrado</dt><dd>{patient.weight} kg</dd></div>}
+          {patient.dateOfBirth && <div class="flex justify-between gap-3"><dt class="text-muted-foreground">Nacimiento</dt><dd>{format(new Date(`${patient.dateOfBirth}T12:00:00`), 'dd/MM/yyyy', { locale: es })}</dd></div>}
+          {patient.microchipNumber && <div class="flex flex-wrap justify-between gap-2"><dt class="text-muted-foreground">Microchip</dt><dd class="break-all font-mono text-xs">{patient.microchipNumber}</dd></div>}
         </dl>
-
-        <div class="mt-4 flex gap-2">
-          <a href={`/pacientes/${id}/editar`} class="flex-1 text-center text-sm px-3 py-2 rounded-lg border hover:bg-muted transition-colors">Editar</a>
-          <a href={`/citas/nueva?patientId=${id}`} class="flex-1 text-center text-sm px-3 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">Nueva Cita</a>
-        </div>
       </div>
 
       <!-- Tutor -->
-      <div class="rounded-xl border bg-card p-6">
+      <div class="rounded-xl border bg-card p-5">
         <h3 class="font-semibold mb-3">Responsable</h3>
         <a href={`/tutores/${patient.ownerId}`} class="font-medium text-primary hover:underline">{patient.ownerFirstName} {patient.ownerLastName}</a>
-        {patient.ownerPhone && <p class="text-sm text-muted-foreground">{patient.ownerPhone}</p>}
-        {patient.ownerEmail && <p class="text-sm text-muted-foreground">{patient.ownerEmail}</p>}
+        {patient.ownerPhone && <p class="mt-2 text-sm"><a href={`tel:${patient.ownerPhone}`} class="hover:underline">{patient.ownerPhone}</a></p>}
+        {patient.ownerEmail && <p class="mt-1 break-all text-sm"><a href={`mailto:${patient.ownerEmail}`} class="hover:underline">{patient.ownerEmail}</a></p>}
         {canManageOwners && <OwnerEditor client:load ownerId={patient.ownerId} />}
       </div>
 
-      <CoOwnersSection client:visible patientId={id} canEdit={canManageOwners} />
-
       {patient.notes && (
-        <div class="rounded-xl border bg-card p-6">
+        <div class="rounded-xl border bg-card p-5">
           <h3 class="font-semibold mb-2">Notas</h3>
           <p class="text-sm text-muted-foreground">{patient.notes}</p>
         </div>
@@ -102,13 +103,8 @@ const speciesEmoji: Record<string, string> = { perro: '🐕', gato: '🐈', ave:
     </div>
 
     <!-- Historial -->
-    <div class="lg:col-span-2">
-      <nav class="flex flex-wrap gap-3 mb-4 text-sm" aria-label="Documentos del paciente">
-        {hasPermission(user.role, 'prescriptions', 'write') && <a class="border rounded-lg px-3 py-2" href={`/recetas/nueva?patientId=${id}`}>Nueva receta</a>}
-        {hasPermission(user.role, 'lab-orders', 'write') && <a class="border rounded-lg px-3 py-2" href={`/ordenes/nueva?patientId=${id}`}>Solicitar examen</a>}
-        {hasPermission(user.role, 'consents', 'write') && <a class="border rounded-lg px-3 py-2" href={`/consentimientos/nueva?patientId=${id}`}>Consentimiento</a>}
-      </nav>
-      <PatientProfileTabs client:load patientId={id} canEdit={canEdit} records={records} appointments={appts} />
+    <div class="min-w-0">
+      <PatientProfileTabs client:load patientId={id} canEdit={canEdit} canWriteAppointments={hasPermission(user.role, 'appointments', 'write')} canWritePrescriptions={hasPermission(user.role, 'prescriptions', 'write')} canWriteLabOrders={hasPermission(user.role, 'lab-orders', 'write')} canWriteConsents={hasPermission(user.role, 'consents', 'write')} canReadPrescriptions={hasPermission(user.role, 'prescriptions', 'read')} canReadLabOrders={hasPermission(user.role, 'lab-orders', 'read')} canReadConsents={hasPermission(user.role, 'consents', 'read')} records={records} appointments={appts} />
     </div>
   </div>
 </DashboardLayout>

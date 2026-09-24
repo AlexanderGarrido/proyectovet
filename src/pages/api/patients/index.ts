@@ -1,9 +1,9 @@
 import type { APIRoute } from 'astro';
 import { db } from '../../../db';
-import { patients, owners } from '../../../db/schema/patients';
-import { eq, ilike, or, desc, sql } from 'drizzle-orm';
+import { patients, owners, speciesEnum } from '../../../db/schema/patients';
+import { eq, ilike, or, and, desc, sql } from 'drizzle-orm';
 import { patientSchema, zodError } from '../../../lib/schemas';
-import { jsonOkPaginated, jsonOk } from '../../../lib/http';
+import { jsonOkPaginated, jsonOk, jsonError } from '../../../lib/http';
 import { requirePermission, requireUnscopedPermission } from '../../../lib/guard';
 
 export const GET: APIRoute = async ({ request, locals }) => {
@@ -16,6 +16,9 @@ export const GET: APIRoute = async ({ request, locals }) => {
 
   const url = new URL(request.url);
   const search = url.searchParams.get('search') || '';
+  const speciesParam = url.searchParams.get('species');
+  if (speciesParam && !speciesEnum.enumValues.includes(speciesParam as typeof speciesEnum.enumValues[number])) return jsonError(400, 'Especie inválida');
+  const species = speciesParam as typeof speciesEnum.enumValues[number] | null;
   const ownerId = url.searchParams.get('ownerId');
   const page = Math.max(1, Number(url.searchParams.get('page') || '1'));
   const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit') || '100')));
@@ -25,9 +28,7 @@ export const GET: APIRoute = async ({ request, locals }) => {
   // muchas veces lo único que se tiene a mano es el teléfono del responsable
   // o su apellido, no el nombre del paciente. El join con `owners` ya existe
   // para el listado, así que ampliar el filtro no agrega consultas.
-  const whereCondition = ownerId
-    ? eq(patients.ownerId, Number(ownerId))
-    : search
+  const searchCondition = search
     ? or(
         ilike(patients.name, `%${search}%`),
         ilike(patients.breed, `%${search}%`),
@@ -36,6 +37,10 @@ export const GET: APIRoute = async ({ request, locals }) => {
         ilike(owners.phone, `%${search}%`)
       )
     : undefined;
+  const whereCondition = and(
+    ownerId ? eq(patients.ownerId, Number(ownerId)) : searchCondition,
+    species ? eq(patients.species, species) : undefined,
+  );
 
   const [result, [{ count }]] = await Promise.all([
     db

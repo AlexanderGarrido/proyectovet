@@ -12,7 +12,7 @@ interface Appointment {
   endAt: string;
   type: string;
   status: string;
-  origin?: 'agendada' | 'sin_cita';
+  origin?: 'agendada' | 'sin_cita' | 'pasada';
   reason?: string;
   patientName?: string;
   patientSpecies?: string;

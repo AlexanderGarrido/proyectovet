@@ -35,8 +35,9 @@ export const appointmentStatusEnum = pgEnum('status', [
 ]);
 
 // Cómo nació la cita: agendada con anticipación, o creada al atender sin
-// cita previa. La agenda y los reportes las distinguen con este campo.
-export const appointmentOriginEnum = pgEnum('appointment_origin', ['agendada', 'sin_cita']);
+// cita previa, o registrada después como consulta pasada. La agenda y los
+// reportes las distinguen con este campo.
+export const appointmentOriginEnum = pgEnum('appointment_origin', ['agendada', 'sin_cita', 'pasada']);
 
 export const appointments = pgTable('appointments', {
   id: serial('id').primaryKey(),

@@ -19,8 +19,8 @@ export interface VisitSnapshot {
   status: string; type: string; reason: string | null; notes: string | null;
   visitAddress: string | null; updatedAt: string; startedAt: string | null; completedAt: string | null;
   noCharge?: boolean;
-  /** 'sin_cita' si la cita se creó al atender. Ausente en copias antiguas. */
-  origin?: 'agendada' | 'sin_cita';
+  /** 'sin_cita' si se creó al atender; 'pasada' si se registró después. Ausente en copias antiguas. */
+  origin?: 'agendada' | 'sin_cita' | 'pasada';
   /** Solo en visitas locales creadas sin señal: alertas traídas en la copia. */
   alerts?: { id: number; category: string; text: string; validUntil: string | null }[];
   patient: { name: string; species: string; breed: string | null; weight: string | null; notes: string | null };

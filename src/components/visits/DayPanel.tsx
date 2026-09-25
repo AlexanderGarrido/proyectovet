@@ -133,7 +133,9 @@ export function DayPanel({ initial, offline = false, initialVisitId }: { initial
         const response = await fetch('/api/jornada');
         if (response.ok) {
           const fresh: DaySnapshot = await response.json();
-          if (fresh.userId === initial.userId) setSnapshot(fresh);
+          // Esta relectura no trae el directorio (solo lo trae «Preparar sin
+          // conexión»): se conserva el que ya había para seguir atendiendo sin cita.
+          if (fresh.userId === initial.userId) setSnapshot((current) => ({ ...fresh, directory: fresh.directory ?? current.directory }));
         }
       }
       if (before) setNotice(`Se intentó enviar ${before} guardado(s). Revisa abajo los que quedaron pendientes.`);

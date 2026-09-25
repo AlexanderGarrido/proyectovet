@@ -18,7 +18,7 @@ export interface VisitUser { id: string; name: string; role: string; }
 export const isVisitStaff = (role: string) => ['admin', 'veterinario', 'recepcionista'].includes(role);
 export const canAccessVisit = (user: VisitUser, veterinarianId: string) => isVisitStaff(user.role) && (user.role !== 'veterinario' || user.id === veterinarianId);
 
-export async function loadDay(user: VisitUser, day = clinicDay(), visitId?: number): Promise<DaySnapshot> {
+export async function loadDay(user: VisitUser, day = clinicDay(), visitId?: number, options: { directory?: boolean } = {}): Promise<DaySnapshot> {
   const { start, end } = clinicDayRange(day);
   const rows = await db.select({
     appointment: appointments,
@@ -56,9 +56,10 @@ export async function loadDay(user: VisitUser, day = clinicDay(), visitId?: numb
       paid: paymentRows.filter((p) => p.invoiceId === i.id).reduce((sum, p) => sum + Number(p.amount), 0),
     })),
   }));
-  // Solo la jornada completa lo trae (no la lectura de una visita suelta), y
-  // solo los roles que pueden atender sin cita.
-  const directory = !visitId && canReadClinical && features.atencionSinCita ? await loadDirectory() : null;
+  // Solo al preparar la jornada sin conexión: puede traer miles de pacientes
+  // y no debe viajar incrustado en cada carga de Hoy. Y solo a los roles que
+  // pueden atender sin cita.
+  const directory = options.directory && !visitId && canReadClinical && features.atencionSinCita ? await loadDirectory() : null;
   const coverage: DayCoverage = {
     schemaVersion: DAY_SCHEMA_VERSION,
     visits: visits.length,

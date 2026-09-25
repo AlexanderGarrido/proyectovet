@@ -179,6 +179,9 @@ export const rememberVisitAlias = (userId: string, localId: number, realId: numb
  * envío en vez de dejar operaciones apuntando a una visita inexistente.
  */
 async function promoteLocalVisit(userId: string, localId: number, realId: number) {
+  // Solo un id provisorio se promueve. Un reintento de apertura que ya
+  // trae el número real movería el borrador sobre sí mismo y lo borraría.
+  if (localId >= 0 || localId === realId) return;
   await rememberVisitAlias(userId, localId, realId);
   for (const item of await listPending(userId)) {
     if (item.operation.visitId === localId) await write(`${userId}:queue:${item.operation.id}`, { ...item, operation: { ...item.operation, visitId: realId } });
@@ -314,7 +317,7 @@ export async function prepareDay(userId: string): Promise<DaySnapshot> {
   // copia por presión de espacio. Ningún navegador la garantiza, así que la
   // interfaz no promete conservación absoluta.
   await navigator.storage?.persist?.().catch(() => false);
-  const response = await fetch('/api/jornada', { signal: AbortSignal.timeout(30000) });
+  const response = await fetch('/api/jornada?directorio=1', { signal: AbortSignal.timeout(30000) });
   if (!response.ok) throw new Error('No se pudo descargar la jornada. Revisa tu sesión y conexión.');
   const data: DaySnapshot = await response.json();
   if (data.userId !== userId || currentFieldUser() !== userId) throw new Error('La cuenta activa cambió. Recarga la página.');

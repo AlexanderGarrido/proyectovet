@@ -217,6 +217,23 @@ describe('Atención sin cita sin señal', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('si falla la relectura tras abrir, el reintento conserva el borrador', async () => {
+    await saveDay(fieldDay());
+    const id = await startUnscheduledVisit('vet-a', card, 'Vet A');
+    await saveFieldDraft('vet-a', id, { reason: 'Vómitos' });
+    let reads = 0;
+    vi.stubGlobal('fetch', vi.fn(async (url: string, _init?: any) => {
+      if (url === '/api/visits/open') return Response.json({ visitId: 41, status: 'en_curso', updatedAt: '2026-09-24T15:00:00.000Z' });
+      // La primera relectura falla: la apertura ya quedó confirmada en el servidor.
+      if (url === '/api/visits/41') return ++reads === 1 ? new Response('error', { status: 500 }) : Response.json(serverVisit(41));
+      throw new Error(`ruta inesperada ${url}`);
+    }));
+    await syncPending('vet-a');
+    await syncPending('vet-a');
+    expect(await listPending('vet-a')).toEqual([]);
+    expect(await loadFieldDraft('vet-a', 41)).toEqual({ reason: 'Vómitos' });
+  });
+
   it('retoma un reemplazo interrumpido usando la equivalencia guardada', async () => {
     const { id, open } = await localVisitWithSave();
     // Corte después de confirmar la apertura: la equivalencia ya se escribió

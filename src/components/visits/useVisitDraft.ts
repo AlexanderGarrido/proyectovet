@@ -149,7 +149,10 @@ export function useVisitDraft(initial: DaySnapshot, visitId: number) {
       return data;
     }
     const cached = await getDay(initial.userId);
-    if (cached) setSnapshot(cached);
+    // Una visita abierta sin señal cambia de número al sincronizar: la copia
+    // ya no la tiene con el id provisorio. Se conserva la vista actual (la
+    // jornada salta a la visita real) en vez de quedarse sin visita.
+    if (cached?.visits.some((v) => v.id === visitId)) setSnapshot(cached);
     return cached;
   }
 

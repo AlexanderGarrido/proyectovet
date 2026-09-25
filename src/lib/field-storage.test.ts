@@ -1,7 +1,7 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { IDBFactory } from 'fake-indexeddb';
-import { activateFieldUser, clearFieldData, getDay, listPending, loadFieldDraft, queueVisit, saveDay, saveFieldDraft, syncPending } from './field-storage';
-import type { DaySnapshot, VisitOperation } from './visit-types';
+import { activateFieldUser, clearFieldData, getDay, listPending, loadFieldDraft, queueVisit, rememberVisitAlias, removePending, resolveVisitAlias, saveDay, saveFieldDraft, startUnscheduledVisit, syncPending } from './field-storage';
+import type { DaySnapshot, PatientCard, VisitOperation } from './visit-types';
 const operation: VisitOperation = { id: '7f3f63d0-5c8d-4cb9-9bf2-9fbc65d65031', visitId: 1, expectedUpdatedAt: '2026-09-16T10:00:00.000Z', action: 'complete', record: { reason: 'Consulta' }, noCharge: true };
 beforeEach(async () => {
   vi.stubGlobal('indexedDB', new IDBFactory());
@@ -131,5 +131,100 @@ describe('Clasificación de resultados de sincronización', () => {
     });
     db.close();
     expect(await loadFieldDraft('vet-a', 42)).toEqual(legacy);
+  });
+});
+
+const card: PatientCard = {
+  id: 5, name: 'Toby', species: 'perro', breed: null, weight: null, notes: null, ownerId: 9,
+  owner: { firstName: 'Ana', lastName: 'Rojas', phone: null, address: null }, alerts: [], records: [], vaccines: [],
+};
+const fieldDay = (): DaySnapshot => ({ userId: 'vet-a', userName: 'Vet A', role: 'veterinario', day: '2026-09-24', preparedAt: '2026-09-24T08:00:00.000Z', visits: [], products: [], locations: [], directory: [card] });
+const serverVisit = (id: number) => ({ ...fieldDay(), visits: [{ id, patientId: 5, status: 'en_curso', origin: 'sin_cita' }] });
+
+/** fetch falso por ruta: apertura, sync y lectura de visita. */
+function server(realId = 41, openStatus = 200) {
+  return vi.fn(async (url: string, _init?: any) => {
+    if (url === '/api/visits/open') return openStatus === 200
+      ? Response.json({ visitId: realId, status: 'en_curso', updatedAt: '2026-09-24T15:00:00.000Z' })
+      : Response.json({ error: 'El paciente está inactivo.' }, { status: openStatus });
+    if (url.endsWith('/sync')) return Response.json({ visitId: realId, status: 'en_curso', updatedAt: '2026-09-24T15:01:00.000Z' });
+    if (url === `/api/visits/${realId}`) return Response.json(serverVisit(realId));
+    throw new Error(`ruta inesperada ${url}`);
+  });
+}
+
+async function localVisitWithSave() {
+  vi.stubGlobal('navigator', { onLine: false });
+  await saveDay(fieldDay());
+  const id = await startUnscheduledVisit('vet-a', card, 'Vet A');
+  const open = (await listPending('vet-a'))[0].operation;
+  await queueVisit('vet-a', { ...operation, id: crypto.randomUUID(), visitId: id, predecessorId: open.id });
+  vi.stubGlobal('navigator', { onLine: true });
+  return { id, open };
+}
+
+describe('Atención sin cita sin señal', () => {
+  it('crea la visita local y encola la apertura', async () => {
+    await saveDay(fieldDay());
+    const id = await startUnscheduledVisit('vet-a', card, 'Vet A');
+    expect(id).toBeLessThan(0);
+    expect((await getDay('vet-a'))!.visits[0]).toMatchObject({ id, origin: 'sin_cita', status: 'en_curso' });
+    expect((await listPending('vet-a'))[0].operation).toMatchObject({ action: 'open', visitId: id, patientId: 5 });
+  });
+
+  it('exige una jornada preparada', async () => {
+    await expect(startUnscheduledVisit('vet-a', card, 'Vet A')).rejects.toThrow('Prepara la jornada');
+  });
+
+  it('permite encadenar el guardado a la apertura', async () => {
+    await localVisitWithSave();
+    expect(await listPending('vet-a')).toHaveLength(2);
+  });
+
+  it('al sincronizar: abre, reemplaza el id provisorio y envía el guardado con el real', async () => {
+    const { id, open } = await localVisitWithSave();
+    await saveFieldDraft('vet-a', id, { reason: 'Vómitos' });
+    const fetchMock = server(41); vi.stubGlobal('fetch', fetchMock);
+
+    expect((await syncPending('vet-a')).sent).toBe(2);
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/visits/open');
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ id: open.id, patientId: 5, occurredAt: (open as any).occurredAt });
+    const syncCall = fetchMock.mock.calls.find((c: any) => String(c[0]).endsWith('/sync'))!;
+    expect(syncCall[0]).toBe('/api/visits/41/sync');
+    expect(JSON.parse(syncCall[1].body).visitId).toBe(41);
+    expect(await resolveVisitAlias('vet-a', id)).toBe(41);
+    expect((await getDay('vet-a'))!.visits.map((v) => v.id)).toEqual([41]);
+    expect(await listPending('vet-a')).toEqual([]);
+  });
+
+  it('la apertura no borra el borrador: se mueve al id real', async () => {
+    await saveDay(fieldDay());
+    const id = await startUnscheduledVisit('vet-a', card, 'Vet A');
+    await saveFieldDraft('vet-a', id, { reason: 'Vómitos' });
+    vi.stubGlobal('fetch', server(41));
+    await syncPending('vet-a');
+    expect(await loadFieldDraft('vet-a', 41)).toEqual({ reason: 'Vómitos' });
+    expect(await loadFieldDraft('vet-a', id)).toBeNull();
+  });
+
+  it('una apertura rechazada bloquea lo que depende de ella sin enviarlo', async () => {
+    await localVisitWithSave();
+    const fetchMock = server(41, 409); vi.stubGlobal('fetch', fetchMock);
+    await syncPending('vet-a');
+    const pending = await listPending('vet-a');
+    expect(pending.every((p) => p.blocked)).toBe(true);
+    expect(pending[1].error).toContain('inactivo');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('retoma un reemplazo interrumpido usando la equivalencia guardada', async () => {
+    const { id, open } = await localVisitWithSave();
+    // Corte después de confirmar la apertura: la equivalencia ya se escribió
+    // y la apertura se retiró, pero el guardado sigue con el id provisorio.
+    await rememberVisitAlias('vet-a', id, 41);
+    await removePending('vet-a', open.id);
+    const fetchMock = server(41); vi.stubGlobal('fetch', fetchMock);
+    expect((await syncPending('vet-a')).sent).toBe(1);
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/visits/41/sync');
   });
 });

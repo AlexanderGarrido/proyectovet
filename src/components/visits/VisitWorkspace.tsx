@@ -38,7 +38,9 @@ export function VisitWorkspace({ initial, visitId, onBack }: { initial: DaySnaps
     catch (e) { controller.setError(e instanceof Error ? e.message : 'No se pudo guardar el borrador. Conserva esta pantalla.'); }
   }
 
-  const provisionalRecord = pending?.operation.record || (clinicalChanged ? {
+  // Una apertura pendiente no trae nota: la nota provisional sale del borrador.
+  const pendingRecord = pending && pending.operation.action !== 'open' ? pending.operation.record : undefined;
+  const provisionalRecord = pendingRecord || (clinicalChanged ? {
     reason: draft.reason || visit.reason || 'Atención a domicilio', subjective: draft.subjective,
     diagnosis: draft.diagnosis, treatment: draft.treatment, observations: draft.observations,
   } : null);

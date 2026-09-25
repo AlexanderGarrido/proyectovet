@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import type { DaySnapshot, VisitOperation, VisitSnapshot } from '../../lib/visit-types';
+import type { DaySnapshot, QueuedOperation, VisitOperation, VisitSnapshot } from '../../lib/visit-types';
 import {
   FIELD_EVENT, getDay, listPending, loadFieldDraft, queueVisit, removePending,
   saveFieldDraft, syncPending, type QueuedVisit,
@@ -69,7 +69,7 @@ export function useVisitDraft(initial: DaySnapshot, visitId: number) {
   const identityValid = useFieldIdentity(initial.userId);
   const pendingStatus = pending && ['travel', 'start'].includes(pending.operation.action);
   const mounted = useRef(true);
-  const hadPending = useRef<VisitOperation | null>(null);
+  const hadPending = useRef<QueuedOperation | null>(null);
 
   const clinicalChanged = Boolean(
     draft.reason || draft.subjective || draft.diagnosis || draft.treatment || draft.observations ||

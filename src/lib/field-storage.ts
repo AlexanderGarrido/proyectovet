@@ -1,4 +1,5 @@
-import type { DaySnapshot, VisitOperation, VisitResult } from './visit-types';
+import type { DaySnapshot, OpenVisitOperation, PatientCard, QueuedOperation, VisitResult } from './visit-types';
+import { localVisitId, visitFromCard } from './local-visit';
 
 const DB = 'alma-field-v1';
 const STORE = 'data';
@@ -29,7 +30,7 @@ export type SyncOutcome =
 
 export interface QueuedVisit {
   userId: string;
-  operation: VisitOperation;
+  operation: QueuedOperation;
   createdAt: string;
   error?: string;
   blocked?: boolean;
@@ -145,17 +146,71 @@ export async function listPending(userId: string): Promise<QueuedVisit[]> {
   }); } finally { db.close(); }
 }
 
-export async function queueVisit(userId: string, operation: VisitOperation, label?: string) {
+export async function queueVisit(userId: string, operation: QueuedOperation, label?: string) {
   if (currentFieldUser() !== userId) throw new Error('La sesión del dispositivo cambió. Vuelve a iniciar sesión.');
   // Stable operation key is written before the first network attempt.
   const existing = (await listPending(userId)).filter((q) => q.operation.visitId === operation.visitId).at(-1);
-  if (existing && existing.operation.id !== operation.id && !(operation.predecessorId === existing.operation.id && ['travel', 'start'].includes(existing.operation.action))) throw new Error('Esta visita ya tiene una consulta pendiente de sincronizar.');
+  // La apertura de una atención sin cita encabeza la cadena igual que ir o
+  // iniciar: la nota se guarda encadenada a ella.
+  if (existing && existing.operation.id !== operation.id && !(operation.predecessorId === existing.operation.id && ['travel', 'start', 'open'].includes(existing.operation.action))) throw new Error('Esta visita ya tiene una consulta pendiente de sincronizar.');
   await write(`${userId}:queue:${operation.id}`, {
     userId, operation, createdAt: existing?.createdAt ?? new Date().toISOString(),
     label: label ?? existing?.label, version: FIELD_SCHEMA_VERSION, attempts: 0,
   } satisfies QueuedVisit);
 }
 export async function removePending(userId: string, id: string) { await write(`${userId}:queue:${id}`, undefined); }
+
+const aliasKey = (userId: string, localId: number) => `${userId}:alias:${localId}`;
+
+/**
+ * Número real que el servidor asignó a una visita creada sin señal. La
+ * equivalencia se conserva aunque la promoción termine: la pantalla que
+ * todavía muestra el id provisorio la usa para saltar a la visita real.
+ */
+export async function resolveVisitAlias(userId: string, localId: number): Promise<number | null> {
+  return localId < 0 ? read<number>(aliasKey(userId, localId)) : localId;
+}
+export const rememberVisitAlias = (userId: string, localId: number, realId: number) => write(aliasKey(userId, localId), realId);
+
+/**
+ * Reemplaza el id provisorio por el real en todo lo que el dispositivo
+ * guarda: cola, borrador y copia del día. La equivalencia se escribe
+ * primero, así un corte a mitad de camino se completa en el siguiente
+ * envío en vez de dejar operaciones apuntando a una visita inexistente.
+ */
+async function promoteLocalVisit(userId: string, localId: number, realId: number) {
+  await rememberVisitAlias(userId, localId, realId);
+  for (const item of await listPending(userId)) {
+    if (item.operation.visitId === localId) await write(`${userId}:queue:${item.operation.id}`, { ...item, operation: { ...item.operation, visitId: realId } });
+  }
+  const draft = await read<unknown>(`${userId}:draft:${localId}`);
+  if (draft !== null) { await write(`${userId}:draft:${realId}`, draft); await write(`${userId}:draft:${localId}`, undefined); }
+  const day = await getDay(userId);
+  if (day?.visits.some((v) => v.id === localId)) await saveDay({ ...day, visits: day.visits.map((v) => v.id === localId ? { ...v, id: realId } : v) });
+}
+
+/** Termina promociones que quedaron a medias por un corte. */
+async function resumePromotions(userId: string) {
+  const locals = new Set((await listPending(userId)).map((q) => q.operation.visitId).filter((id) => id < 0));
+  for (const localId of locals) {
+    const realId = await read<number>(aliasKey(userId, localId));
+    if (realId) await promoteLocalVisit(userId, localId, realId);
+  }
+}
+
+/**
+ * Atiende sin cita y sin señal: la visita nace en la copia local con un id
+ * provisorio y su apertura queda primera en la cola.
+ */
+export async function startUnscheduledVisit(userId: string, card: PatientCard, userName: string): Promise<number> {
+  const day = await getDay(userId);
+  if (!day) throw new Error('Prepara la jornada sin conexión antes de atender sin señal.');
+  const occurredAt = new Date().toISOString();
+  const id = localVisitId();
+  await saveDay({ ...day, visits: [...day.visits, visitFromCard(card, id, { id: userId, name: userName }, occurredAt)] });
+  await queueVisit(userId, { id: crypto.randomUUID(), action: 'open', visitId: id, patientId: card.id, occurredAt }, card.name);
+  return id;
+}
 
 function classify(status: number): { outcome: SyncOutcome; blocked: boolean } {
   if (status === 401) return { outcome: 'sesion', blocked: true };
@@ -184,13 +239,31 @@ function withTabLock<T>(userId: string, run: () => Promise<T>): Promise<T> {
 async function runSync(userId: string): Promise<{ sent: number; error?: string }> {
   let sent = 0;
   if (!navigator.onLine) return { sent, error: 'Sin conexión. Los cambios permanecen en este dispositivo.' };
-  for (const item of await listPending(userId)) {
+  await resumePromotions(userId);
+  // La cola se vuelve a leer en cada vuelta: confirmar una apertura cambia
+  // el visitId de las operaciones que la siguen.
+  const done = new Set<string>();
+  for (;;) {
+    const item = (await listPending(userId)).find((q) => !q.blocked && !done.has(q.operation.id));
+    if (!item) break;
+    done.add(item.operation.id);
     if (currentFieldUser() !== userId) return { sent, error: 'La cuenta activa cambió. Sincronización detenida.' };
-    if (item.blocked) continue;
+    const isOpen = item.operation.action === 'open';
+    if (!isOpen && item.operation.visitId < 0) {
+      // Depende de una apertura que todavía no se confirmó. Si esa apertura
+      // fue rechazada, esta queda bloqueada con el mismo motivo; si no, espera.
+      const opener = (await listPending(userId)).find((q) => q.operation.id === item.operation.predecessorId);
+      if (opener?.blocked) await write(`${userId}:queue:${item.operation.id}`, { ...item, blocked: true, outcome: 'rechazo', error: `No se pudo registrar el inicio de la atención: ${opener.error}` });
+      continue;
+    }
     const attempt = { attempts: (item.attempts ?? 0) + 1, lastAttemptAt: new Date().toISOString() };
     try {
-      const response = await fetch(`/api/visits/${item.operation.visitId}/sync`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Field-User': userId }, body: JSON.stringify(item.operation), signal: AbortSignal.timeout(30000),
+      const url = isOpen ? '/api/visits/open' : `/api/visits/${item.operation.visitId}/sync`;
+      const payload = isOpen
+        ? { id: item.operation.id, patientId: (item.operation as OpenVisitOperation).patientId, occurredAt: (item.operation as OpenVisitOperation).occurredAt }
+        : item.operation;
+      const response = await fetch(url, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Field-User': userId }, body: JSON.stringify(payload), signal: AbortSignal.timeout(30000),
       });
       const result = await response.json().catch(() => ({ error: 'El servidor no confirmó el guardado.' }));
       if (currentFieldUser() !== userId) return { sent, error: 'La cuenta activa cambió. Sincronización detenida.' };
@@ -202,6 +275,7 @@ async function runSync(userId: string): Promise<{ sent: number; error?: string }
         continue;
       }
       const data = result as VisitResult;
+      if (isOpen) await promoteLocalVisit(userId, item.operation.visitId, data.visitId);
       // Refresh cached visit before releasing the pending operation, so offline users see the confirmed result.
       const cached = await getDay(userId);
       if (cached) {
@@ -212,7 +286,8 @@ async function runSync(userId: string): Promise<{ sent: number; error?: string }
           await saveDay({ ...cached, visits: cached.visits.map((v) => v.id === data.visitId ? snapshot.visits[0] : v), products: snapshot.products, locations: snapshot.locations });
         } else throw new Error('Guardado confirmado. Falta actualizar la copia local; vuelve a sincronizar.');
       }
-      if (!['travel', 'start'].includes(item.operation.action)) await removeFieldDraft(userId, data.visitId);
+      // Confirmar una apertura no cierra la nota: el borrador sigue en curso.
+      if (!['travel', 'start', 'open'].includes(item.operation.action)) await removeFieldDraft(userId, data.visitId);
       await removePending(userId, item.operation.id);
       sent++;
     } catch (error) {

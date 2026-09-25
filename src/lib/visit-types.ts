@@ -4,8 +4,8 @@
  * si vivieran junto a la consulta de base, importarlas desde el navegador
  * arrastraría el cliente de PostgreSQL al paquete del teléfono.
  */
-export const DAY_LIMITS = { visits: 150, recordsPerPatient: 20, vaccinesPerPatient: 20, products: 500, recordsTotal: 1500 } as const;
-export const DAY_SCHEMA_VERSION = 2;
+export const DAY_LIMITS = { visits: 150, recordsPerPatient: 20, vaccinesPerPatient: 20, products: 500, recordsTotal: 1500, directory: 2000, directoryRecords: 3 } as const;
+export const DAY_SCHEMA_VERSION = 3;
 
 export interface VisitRecord {
   id: number; appointmentId: number | null; patientId: number; date: string;
@@ -29,6 +29,20 @@ export interface VisitSnapshot {
   invoices: { id: number; total: string; paid: number; status: string; invoiceNumber: string }[];
   vaccines: { name: string; applicationDate: string; nextDoseDate: string | null }[];
 }
+/**
+ * Paciente del directorio que viaja en la copia del día, para poder atender
+ * sin cita y sin señal. Trae lo justo para atender con seguridad —quién es,
+ * de quién es, a qué es alérgico y cómo le fue las últimas veces—, no el
+ * historial completo.
+ */
+export interface PatientCard {
+  id: number; name: string; species: string; breed: string | null; weight: string | null; notes: string | null;
+  ownerId: number;
+  owner: { firstName: string; lastName: string; phone: string | null; address: string | null };
+  alerts: { id: number; category: string; text: string; validUntil: string | null }[];
+  records: VisitRecord[];
+  vaccines: { name: string; applicationDate: string; nextDoseDate: string | null }[];
+}
 export interface VisitProduct { id: number; name: string; stock: string; unit: string; }
 export interface VisitLocation { id: number; name: string; assignedVetId: string | null; stocks: { productId: number; stock: string }[]; }
 /**
@@ -48,12 +62,17 @@ export interface DayCoverage {
   productsTruncated: boolean;
   /** Antecedentes clínicos omitidos por permisos del rol, no por límite. */
   clinicalWithheld: boolean;
+  /** Pacientes del directorio; ausente si el rol no lo recibe. */
+  directory?: number;
+  directoryTruncated?: boolean;
 }
 
 export interface DaySnapshot {
   userId: string; userName: string; role: string; day: string; preparedAt: string;
   visits: VisitSnapshot[]; products: VisitProduct[]; locations: VisitLocation[];
   coverage?: DayCoverage;
+  /** Pacientes activos para atender sin cita sin señal (solo admin y veterinario). */
+  directory?: PatientCard[];
   /** Versión del formato con que se escribió esta copia en el dispositivo. */
   schemaVersion?: number;
 }

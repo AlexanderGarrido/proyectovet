@@ -9,6 +9,8 @@ import { products, stockLocations, stockByLocation } from '../db/schema/inventor
 import { clinicDay, clinicDayRange } from './clinic-time';
 import type { DayCoverage, DaySnapshot, VisitSnapshot } from './visit-types';
 import { DAY_LIMITS, DAY_SCHEMA_VERSION } from './visit-types';
+import { loadDirectory } from './directory';
+import { features } from './features';
 
 export { DAY_LIMITS, DAY_SCHEMA_VERSION };
 
@@ -54,6 +56,9 @@ export async function loadDay(user: VisitUser, day = clinicDay(), visitId?: numb
       paid: paymentRows.filter((p) => p.invoiceId === i.id).reduce((sum, p) => sum + Number(p.amount), 0),
     })),
   }));
+  // Solo la jornada completa lo trae (no la lectura de una visita suelta), y
+  // solo los roles que pueden atender sin cita.
+  const directory = !visitId && canReadClinical && features.atencionSinCita ? await loadDirectory() : null;
   const coverage: DayCoverage = {
     schemaVersion: DAY_SCHEMA_VERSION,
     visits: visits.length,
@@ -66,9 +71,11 @@ export async function loadDay(user: VisitUser, day = clinicDay(), visitId?: numb
     products: productRows.length,
     productsTruncated: productRows.length === DAY_LIMITS.products,
     clinicalWithheld: !canReadClinical,
+    ...(directory ? { directory: directory.cards.length, directoryTruncated: directory.truncated } : {}),
   };
   return JSON.parse(JSON.stringify({
     userId: user.id, userName: user.name, role: user.role, day, preparedAt: new Date().toISOString(), visits, products: productRows, coverage, schemaVersion: DAY_SCHEMA_VERSION,
+    ...(directory ? { directory: directory.cards } : {}),
     locations: locations.map((l) => ({ id: l.id, name: l.name, assignedVetId: l.assignedVetId, stocks: stockRows.filter((s) => s.locationId === l.id).map((s) => ({ productId: s.productId, stock: s.stock })) })),
   })) as DaySnapshot;
 }

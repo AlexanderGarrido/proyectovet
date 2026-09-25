@@ -22,6 +22,7 @@ export function CoverageNotice({ snapshot }: { snapshot: DaySnapshot }) {
   if (coverage.recordsTruncated) notes.push(`Cada paciente trae hasta ${coverage.recordsPerPatient} antecedentes; el historial completo requiere conexión.`);
   if (coverage.productsTruncated) notes.push(`El catálogo descargado llega a ${coverage.products} productos.`);
   if (coverage.clinicalWithheld) notes.push('Los antecedentes clínicos no se incluyen para este rol.');
+  if (coverage.directoryTruncated) notes.push(`El directorio trae los primeros ${coverage.directory} pacientes activos por nombre; los demás solo pueden atenderse sin cita con señal.`);
   // Una copia escrita por otra versión del cliente puede no traer todos los
   // campos que esta pantalla espera; conviene volver a prepararla.
   const versionMismatch = (snapshot.schemaVersion ?? 1) !== DAY_SCHEMA_VERSION;

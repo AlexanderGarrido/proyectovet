@@ -140,6 +140,12 @@ export async function saveVisit(user: VisitUser, operation: VisitOperation): Pro
       ...(operation.noCharge !== undefined ? { noCharge: operation.noCharge } : {}),
       ...(operation.action === 'start' && !visit.startedAt ? { startedAt: new Date() } : {}),
       ...(operation.action === 'complete' && !visit.completedAt ? { completedAt: new Date() } : {}),
+      // La atención sin cita nació con un fin provisorio: al cerrarla, la
+      // agenda debe mostrar lo que realmente duró. Nunca antes del inicio
+      // más un minuto, aunque el reloj del teléfono haya ido adelantado.
+      ...(operation.action === 'complete' && visit.origin === 'sin_cita'
+        ? { endAt: new Date(Math.max(Date.now(), new Date(visit.scheduledAt).getTime() + 60_000)) }
+        : {}),
     }).where(eq(appointments.id, visit.id));
 
     // Los pendientes derivados del cierre se crean en la misma transacción:

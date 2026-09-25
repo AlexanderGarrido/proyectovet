@@ -268,3 +268,24 @@ describe('Adenda sobre una visita cerrada', () => {
     expect(state.committed).toHaveLength(0);
   });
 });
+
+describe('cierre de una atención sin cita', () => {
+  const invoice = { id: 4, total: '18000.00', status: 'pagada' };
+  const reads = (extra: object) => [[{ ...visit, ...extra }], [], [{ id: 3 }], [invoice], [{ amount: '18000.00' }], []];
+
+  it('sin_cita: endAt pasa a la hora real del cierre', async () => {
+    const state = transaction(reads({ origin: 'sin_cita', scheduledAt: new Date('2026-09-16T11:00:00.000Z') }));
+    const before = Date.now();
+    await saveVisit(user, operation({ action: 'complete' }));
+    const update = state.committed.find((w) => w.table === appointments && w.kind === 'update')!.value;
+    expect(update.endAt).toBeInstanceOf(Date);
+    expect(update.endAt.getTime()).toBeGreaterThanOrEqual(before);
+  });
+
+  it('agendada: endAt no se toca', async () => {
+    const state = transaction(reads({ origin: 'agendada' }));
+    await saveVisit(user, operation({ action: 'complete' }));
+    const update = state.committed.find((w) => w.table === appointments && w.kind === 'update')!.value;
+    expect(update).not.toHaveProperty('endAt');
+  });
+});

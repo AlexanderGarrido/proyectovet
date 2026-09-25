@@ -215,7 +215,7 @@ export function AppointmentCalendar() {
                       </span>
                       {a.patientName && (
                         <span className="text-[11px] leading-tight font-medium w-full truncate mt-0.5 opacity-90">
-                          {a.origin === 'sin_cita' ? 'Sin cita · ' : ''}{a.patientName}
+                          {a.origin === 'sin_cita' ? 'Sin cita · ' : a.origin === 'pasada' ? 'Pasada · ' : ''}{a.patientName}
                         </span>
                       )}
                     </button>

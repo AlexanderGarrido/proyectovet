@@ -242,7 +242,7 @@ export function DayPanel({ initial, offline = false, initialVisitId }: { initial
                 <p className="mt-1 text-sm text-muted-foreground">{visit.visitAddress || visit.owner.address || 'Sin dirección'}</p>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <VisitStatusBadge status={visit.status} />
-                  {visit.origin === 'sin_cita' && <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium">Sin cita</span>}
+                  {visit.origin && visit.origin !== 'agendada' && <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium">{visit.origin === 'pasada' ? 'Consulta pasada' : 'Sin cita'}</span>}
                   {queued && <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-200">{queued.blocked ? 'Necesita revisión' : 'Guardado sin enviar'}</span>}
                   {snapshot.role !== 'veterinario' && <span className="text-xs text-muted-foreground">{visit.veterinarianName}</span>}
                 </div>

@@ -107,7 +107,7 @@ const speciesEmoji: Record<string, string> = { perro: '🐕', gato: '🐈', ave:
 
     <!-- Historial -->
     <div class="min-w-0">
-      <PatientProfileTabs client:load patientId={id} canEdit={canEdit} canWriteAppointments={hasPermission(user.role, 'appointments', 'write')} canWritePrescriptions={hasPermission(user.role, 'prescriptions', 'write')} canWriteLabOrders={hasPermission(user.role, 'lab-orders', 'write')} canWriteConsents={hasPermission(user.role, 'consents', 'write')} canReadPrescriptions={hasPermission(user.role, 'prescriptions', 'read')} canReadLabOrders={hasPermission(user.role, 'lab-orders', 'read')} canReadConsents={hasPermission(user.role, 'consents', 'read')} records={records} appointments={appts} />
+      <PatientProfileTabs client:load patientId={id} userId={user.id} canEdit={canEdit} canWriteAppointments={hasPermission(user.role, 'appointments', 'write')} canWritePrescriptions={hasPermission(user.role, 'prescriptions', 'write')} canWriteLabOrders={hasPermission(user.role, 'lab-orders', 'write')} canWriteConsents={hasPermission(user.role, 'consents', 'write')} canReadPrescriptions={hasPermission(user.role, 'prescriptions', 'read')} canReadLabOrders={hasPermission(user.role, 'lab-orders', 'read')} canReadConsents={hasPermission(user.role, 'consents', 'read')} records={records} appointments={appts} />
     </div>
   </div>
 </DashboardLayout>

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { DaySnapshot, VisitSnapshot } from '../../lib/visit-types';
 import { useVisitDraft } from './useVisitDraft';
+import { discardFieldVisit } from '../../lib/field-storage';
 import { VisitHeader, usePatientAlerts } from './VisitHeader';
 import { ClinicalNote } from './ClinicalNote';
 import { VisitHistory } from './VisitHistory';
@@ -30,6 +31,25 @@ export function VisitWorkspace({ initial, visitId, onBack }: { initial: DaySnaps
     visit, draft, canMedical, closed, ownRecords, error, busy, photosBusy, pending, pendingStatus,
     ready, savedAt, online, identityValid, clinicalChanged, dirty, submit, sync, correctPending, saveDraftNow,
   } = controller;
+  // Una atención sin cita (o consulta pasada) abierta por error se puede
+  // descartar mientras no tenga nada que conservar: ni nota, ni cobro, ni
+  // guardados en cola más allá de su propia apertura.
+  const canDiscard = canMedical && ['sin_cita', 'pasada'].includes(visit.origin ?? '') && visit.status === 'en_curso'
+    && !ownRecords.length && !visit.invoices.some((i) => i.status !== 'anulada')
+    && (!pending || pending.operation.action === 'open');
+
+  async function discard() {
+    if (!window.confirm('¿Descartar esta atención? Se borra por completo, como si no se hubiera abierto.')) return;
+    controller.setBusy(true); controller.setError('');
+    try {
+      await discardFieldVisit(initial.userId, visitId);
+      if (onBack) onBack(); else window.location.href = `/pacientes/${visit.patientId}`;
+    } catch (e) {
+      controller.setError(!navigator.onLine
+        ? 'Sin señal no se puede descartar una atención que ya llegó al servidor. Reintenta al recuperar conexión.'
+        : e instanceof Error ? e.message : 'No se pudo descartar la atención.');
+    } finally { controller.setBusy(false); }
+  }
   const [section, setSection] = useState<(typeof SECTIONS)[number][0]>('atencion');
   const { alerts, state: alertsState } = usePatientAlerts(visit.patientId);
   // Sin señal no se pueden pedir las alertas; una visita creada desde el
@@ -68,7 +88,11 @@ export function VisitWorkspace({ initial, visitId, onBack }: { initial: DaySnaps
         {onBack
           ? <button className="min-h-11 text-sm text-primary" onClick={back}>← Mi jornada</button>
           : <a className="min-h-11 text-sm text-primary" href="/dashboard">← Mi jornada</a>}
-        <a className="min-h-11 text-sm text-primary" href={`/citas/${visitId}/editar`}>Editar agenda</a>
+        <div className="flex flex-wrap items-center gap-4">
+          {canDiscard && <button className="min-h-11 text-sm text-destructive disabled:opacity-50" disabled={busy} onClick={discard}>Descartar atención</button>}
+          {/* Una visita local todavía no tiene número: no hay agenda que editar. */}
+          {visitId > 0 && <a className="min-h-11 text-sm text-primary" href={`/citas/${visitId}/editar`}>Editar agenda</a>}
+        </div>
       </div>
 
       <VisitHeader visit={visit} alerts={shownAlerts} alertsState={shownState} />

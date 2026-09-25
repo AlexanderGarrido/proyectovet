@@ -11,6 +11,7 @@ import { PatientTimeline } from './PatientTimeline';
 import { PatientAlertsPanel } from './PatientAlertsPanel';
 import { ErrorState } from '../ui/error-state';
 import { features } from '../../lib/features';
+import { PastConsultButton } from './PastConsultButton';
 
 interface MedicalRecord {
   id: number;
@@ -77,6 +78,8 @@ const labStatusColors: Record<string, string> = {
 
 interface Props {
   patientId: number;
+  /** Cuenta que abre la consulta pasada (el servidor exige que coincida con la sesión). */
+  userId: string;
   canEdit: boolean;
   canWriteAppointments: boolean;
   canWritePrescriptions: boolean;
@@ -100,7 +103,7 @@ function sectionFromUrl(canViewDocuments: boolean): Section {
   return features.cronologia ? 'actividad' : 'consultas';
 }
 
-export function PatientProfileTabs({ patientId, canEdit, canWriteAppointments, canWritePrescriptions, canWriteLabOrders, canWriteConsents, canReadPrescriptions, canReadLabOrders, canReadConsents, records, appointments }: Props) {
+export function PatientProfileTabs({ patientId, userId, canEdit, canWriteAppointments, canWritePrescriptions, canWriteLabOrders, canWriteConsents, canReadPrescriptions, canReadLabOrders, canReadConsents, records, appointments }: Props) {
   const canViewDocuments = canReadPrescriptions || canReadLabOrders || canReadConsents || canWriteConsents;
   const [tab, setTab] = useState<Section>(features.cronologia ? 'actividad' : 'consultas');
   const [prescriptions, setPrescriptions] = useState<Prescription[] | null>(null);
@@ -169,7 +172,7 @@ export function PatientProfileTabs({ patientId, canEdit, canWriteAppointments, c
         <TabsContent value="consultas">
           <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
             <span className="text-sm text-muted-foreground">Últimas consultas registradas</span>
-            {canEdit && <a href={`/historial/nuevo?patientId=${patientId}`} className="text-sm text-muted-foreground hover:underline">Registrar consulta pasada</a>}
+            {canEdit && features.atencionSinCita && <PastConsultButton userId={userId} patientId={patientId} />}
           </div>
           {records.length === 0 ? (
             <EmptyState icon={FileText} title="Sin registros médicos" />

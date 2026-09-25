@@ -159,7 +159,7 @@ export function AppointmentList() {
                     <div className="font-medium">{clinicDateLabel(clinicParts(a.scheduledAt)?.day ?? '', { day: '2-digit', month: '2-digit', year: 'numeric' })}</div>
                     <div className="text-xs text-muted-foreground">{clinicHhmm(a.scheduledAt)}</div>
                   </td>
-                  <td className="px-4 py-3 font-medium">{a.patientName || '—'}{a.origin === 'sin_cita' && <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs font-normal">Sin cita</span>}</td>
+                  <td className="px-4 py-3 font-medium">{a.patientName || '—'}{a.origin && a.origin !== 'agendada' && <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs font-normal">{a.origin === 'pasada' ? 'Consulta pasada' : 'Sin cita'}</span>}</td>
                   <td className="px-4 py-3 text-muted-foreground">{a.ownerFirstName} {a.ownerLastName}</td>
                   <td className="px-4 py-3">{typeLabels[a.type] || a.type}</td>
                   <td className="px-4 py-3 text-muted-foreground">{a.veterinarianName || '—'}</td>

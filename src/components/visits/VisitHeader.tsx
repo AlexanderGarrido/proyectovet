@@ -37,7 +37,11 @@ export function VisitHeader({ visit, alerts, alertsState }: {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2 text-sm opacity-90">
-            <span>{visit.origin === 'sin_cita' ? `Sin cita · desde las ${clinicHhmm(visit.scheduledAt)}` : `${clinicHhmm(visit.scheduledAt)} · ${visit.type}`}</span>
+            <span>{visit.origin === 'sin_cita'
+              ? `Sin cita · desde las ${clinicHhmm(visit.scheduledAt)}`
+              : visit.origin === 'pasada'
+                ? `Consulta pasada · ${new Date(visit.scheduledAt).toLocaleDateString('es-CL', { timeZone: CLINIC_TIME_ZONE })} ${clinicHhmm(visit.scheduledAt)}`
+                : `${clinicHhmm(visit.scheduledAt)} · ${visit.type}`}</span>
             <VisitStatusBadge status={visit.status} className="bg-white/20 text-primary-foreground" />
           </div>
           <h2 className="mt-1 text-2xl font-semibold">{visit.patient.name}</h2>

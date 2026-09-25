@@ -31,3 +31,23 @@ describe('apertura con señal', () => {
     await expect(createOpener('vet-1')(5)).rejects.toThrow('inactivo');
   });
 });
+
+describe('apertura de una consulta pasada', () => {
+  it('envía el origen y la fecha elegida', async () => {
+    const fetchMock = vi.fn(async (_url: string, _init?: any) => Response.json({ visitId: 7 }));
+    vi.stubGlobal('fetch', fetchMock);
+    await createOpener('vet-1')(5, { origin: 'pasada', occurredAt: '2025-03-01T13:00:00.000Z' });
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({ patientId: 5, origin: 'pasada', occurredAt: '2025-03-01T13:00:00.000Z' });
+  });
+  it('otra fecha para el mismo paciente es otra operación', async () => {
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new TypeError('sin red'))
+      .mockResolvedValueOnce(Response.json({ visitId: 8 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const open = createOpener('vet-1');
+    await expect(open(5, { origin: 'pasada', occurredAt: '2025-03-01T13:00:00.000Z' })).rejects.toThrow();
+    await open(5, { origin: 'pasada', occurredAt: '2025-04-01T13:00:00.000Z' });
+    const [a, b] = fetchMock.mock.calls.map((c: any) => JSON.parse(c[1].body).id);
+    expect(a).not.toBe(b);
+  });
+});

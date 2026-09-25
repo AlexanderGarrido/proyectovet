@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import type { DaySnapshot, VisitSnapshot } from '../../lib/visit-types';
 import { clinicDay, clinicDateLabel, clinicHhmm, clinicTime } from '../../lib/clinic-time';
-import { FIELD_EVENT, applyPendingUpdate, getDay, prepareDay, resolveVisitAlias, type QueuedVisit } from '../../lib/field-storage';
+import { FIELD_EVENT, applyPendingUpdate, getDay, prepareDay, resolveVisitAlias, startUnscheduledVisit, type QueuedVisit } from '../../lib/field-storage';
+import { createOpener } from '../../lib/open-visit-client';
+import { PatientPicker, type PickedPatient } from './PatientPicker';
 import { useSyncState } from '../common/SyncStatus';
 import { useFieldIdentity } from './useFieldIdentity';
 import { VisitWorkspace } from './VisitWorkspace';
@@ -76,6 +78,34 @@ export function DayPanel({ initial, offline = false, initialVisitId }: { initial
     return () => { active = false; window.removeEventListener(FIELD_EVENT, check); };
   }, [initial.userId]);
 
+  const [picking, setPicking] = useState(false);
+  const [opener] = useState(() => createOpener(initial.userId));
+  const canAttend = features.atencionSinCita && ['admin', 'veterinario'].includes(snapshot.role);
+
+  /**
+   * Atender sin cita. Con señal la apertura va directo al servidor y se
+   * navega a la visita real; sin señal nace en la copia local y la apertura
+   * se encola para cuando vuelva la conexión.
+   */
+  async function attend(patient: PickedPatient) {
+    setBusy(true); setProblem('');
+    try {
+      if (offline) {
+        if (!patient.card) throw new Error('Este paciente no está en la copia del día.');
+        const id = await startUnscheduledVisit(initial.userId, patient.card, snapshot.userName);
+        const cached = await getDay(initial.userId);
+        if (cached) setSnapshot(cached);
+        setPicking(false);
+        setSelected(id);
+      } else {
+        window.location.href = `/citas/${await opener(patient.id)}`;
+      }
+    } catch (e) {
+      setPicking(false);
+      setProblem(e instanceof Error ? e.message : 'No se pudo abrir la atención');
+    } finally { setBusy(false); }
+  }
+
   // Una visita abierta sin señal cambia de id al sincronizar: si la que está
   // en pantalla desapareció de la copia, se busca su número real.
   useEffect(() => {
@@ -133,7 +163,8 @@ export function DayPanel({ initial, offline = false, initialVisitId }: { initial
         <p className="mt-1 text-sm text-muted-foreground">{clinicDateLabel(snapshot.day)}</p>
       </div>
       <div className="flex flex-wrap gap-2">
-        <a className={button} href="/citas/nueva">+ Agendar visita</a>
+        {canAttend && <button className={button} disabled={busy} onClick={() => setPicking(true)}>Atender sin cita</button>}
+        {!offline && <a className={button} href="/citas/nueva">+ Agendar visita</a>}
         <button className={button} disabled={busy} onClick={prepare}>{busy ? 'Preparando…' : 'Preparar sin conexión'}</button>
       </div>
     </div>
@@ -209,6 +240,7 @@ export function DayPanel({ initial, offline = false, initialVisitId }: { initial
                 <p className="mt-1 text-sm text-muted-foreground">{visit.visitAddress || visit.owner.address || 'Sin dirección'}</p>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <VisitStatusBadge status={visit.status} />
+                  {visit.origin === 'sin_cita' && <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium">Sin cita</span>}
                   {queued && <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-200">{queued.blocked ? 'Necesita revisión' : 'Guardado sin enviar'}</span>}
                   {snapshot.role !== 'veterinario' && <span className="text-xs text-muted-foreground">{visit.veterinarianName}</span>}
                 </div>
@@ -231,5 +263,6 @@ export function DayPanel({ initial, offline = false, initialVisitId }: { initial
       ))}
     </div>
     <p className="text-xs text-muted-foreground">El tiempo promedio considera las visitas con inicio y cierre registrados. Los saldos corresponden a las visitas de esta jornada.</p>
+    {picking && <PatientPicker offline={offline} directory={snapshot.directory} busy={busy} onPick={attend} onClose={() => setPicking(false)} />}
   </div>;
 }

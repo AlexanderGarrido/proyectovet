@@ -6,7 +6,7 @@ afterEach(() => vi.unstubAllEnvs());
 
 describe('Banderas de función', () => {
   it('todo viene activado por omisión', () => {
-    for (const feature of ['cronologia', 'plantillas', 'catalogoServicios', 'recorrido', 'pendientes', 'botiquinPreparacion'] as const) {
+    for (const feature of ['cronologia', 'plantillas', 'catalogoServicios', 'recorrido', 'pendientes', 'botiquinPreparacion', 'atencionSinCita'] as const) {
       expect(isEnabled(feature)).toBe(true);
     }
   });
@@ -20,6 +20,12 @@ describe('Banderas de función', () => {
     expect(isEnabled('recorrido')).toBe(true);
     vi.stubEnv('PUBLIC_FEATURE_RECORRIDO', '0');
     expect(isEnabled('recorrido')).toBe(true);
+  });
+
+  it('la atención sin cita se apaga con PUBLIC_FEATURE_ATENCION_SIN_CITA=off', () => {
+    vi.stubEnv('PUBLIC_FEATURE_ATENCION_SIN_CITA', 'off');
+    expect(isEnabled('atencionSinCita')).toBe(false);
+    expect(isEnabled('cronologia')).toBe(true);
   });
 
   it('apagar una función no afecta a las demás', () => {

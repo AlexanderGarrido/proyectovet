@@ -16,7 +16,8 @@ type FeatureName =
   | 'catalogoServicios'
   | 'recorrido'
   | 'pendientes'
-  | 'botiquinPreparacion';
+  | 'botiquinPreparacion'
+  | 'atencionSinCita';
 
 const ENV_KEYS: Record<FeatureName, string> = {
   cronologia: 'PUBLIC_FEATURE_CRONOLOGIA',
@@ -25,6 +26,7 @@ const ENV_KEYS: Record<FeatureName, string> = {
   recorrido: 'PUBLIC_FEATURE_RECORRIDO',
   pendientes: 'PUBLIC_FEATURE_PENDIENTES',
   botiquinPreparacion: 'PUBLIC_FEATURE_BOTIQUIN',
+  atencionSinCita: 'PUBLIC_FEATURE_ATENCION_SIN_CITA',
 };
 
 function read(key: string): string | undefined {
@@ -46,4 +48,5 @@ export const features = {
   get recorrido() { return isEnabled('recorrido'); },
   get pendientes() { return isEnabled('pendientes'); },
   get botiquinPreparacion() { return isEnabled('botiquinPreparacion'); },
+  get atencionSinCita() { return isEnabled('atencionSinCita'); },
 };

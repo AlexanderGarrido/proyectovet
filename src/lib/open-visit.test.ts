@@ -83,3 +83,15 @@ describe('openVisit', () => {
     expect(inserts).toEqual([]);
   });
 });
+
+describe('openVisit de una consulta pasada', () => {
+  it('guarda origin pasada, sin inicio medido y sin el tope de 7 días', async () => {
+    const past = { ...input, occurredAt: '2025-03-01T13:00:00.000Z', origin: 'pasada' as const };
+    const { inserts } = transaction([[], [{ id: 5, ownerId: 9, isActive: true }]]);
+    await openVisit(vet, past, now);
+    const appt = inserts.find((i) => i.table === appointments)!.value;
+    expect(appt).toMatchObject({ origin: 'pasada', status: 'en_curso', startedAt: null });
+    expect(appt.scheduledAt.toISOString()).toBe('2025-03-01T13:00:00.000Z');
+    expect(appt.endAt.toISOString()).toBe('2025-03-01T13:30:00.000Z');
+  });
+});

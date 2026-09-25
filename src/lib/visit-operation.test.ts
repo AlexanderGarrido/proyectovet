@@ -105,3 +105,21 @@ describe('checkOpenTime', () => {
     expect(() => checkOpenTime('2026-09-17T14:59:00.000Z', openNow)).toThrow(/7 días/);
   });
 });
+
+describe('apertura de consulta pasada', () => {
+  it('acepta origin pasada o sin_cita, y ningún otro', () => {
+    expect(openVisitSchema.safeParse({ ...openBase, origin: 'pasada' }).success).toBe(true);
+    expect(openVisitSchema.safeParse({ ...openBase, origin: 'sin_cita' }).success).toBe(true);
+    expect(openVisitSchema.safeParse({ ...openBase, origin: 'agendada' }).success).toBe(false);
+  });
+  it('acepta cualquier fecha pasada, sin el tope de 7 días', () => {
+    expect(() => checkOpenTime('2025-01-10T12:00:00.000Z', openNow, 'pasada')).not.toThrow();
+  });
+  it('rechaza una hora futura o de hace menos de un minuto: eso es atender ahora', () => {
+    expect(() => checkOpenTime('2026-09-24T15:05:00.000Z', openNow, 'pasada')).toThrow(VisitError);
+    expect(() => checkOpenTime('2026-09-24T14:59:30.000Z', openNow, 'pasada')).toThrow(/pasado/);
+  });
+  it('rechaza fechas anteriores a 2000', () => {
+    expect(() => checkOpenTime('1999-12-31T12:00:00.000Z', openNow, 'pasada')).toThrow(VisitError);
+  });
+});

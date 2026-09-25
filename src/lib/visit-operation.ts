@@ -51,15 +51,28 @@ export const openVisitSchema = z.object({
   id: z.string().uuid(),
   patientId: z.number().int().positive(),
   occurredAt: z.string().datetime(),
+  // 'pasada': se registra después, con la fecha real de la atención.
+  origin: z.enum(['sin_cita', 'pasada']).optional(),
 }).strict();
 export type OpenVisitInput = z.infer<typeof openVisitSchema>;
 
 const OPEN_FUTURE_MS = 10 * 60 * 1000;
 const OPEN_PAST_MS = 7 * 24 * 60 * 60 * 1000;
+const PAST_MIN_AGE_MS = 60 * 1000;
+const PAST_EARLIEST = Date.parse('2000-01-01T00:00:00.000Z');
 
-/** La hora la declara el teléfono: se acota para no aceptar un reloj desajustado. */
-export function checkOpenTime(occurredAt: string, now = new Date()) {
+/**
+ * La hora la declara el teléfono: se acota para no aceptar un reloj
+ * desajustado. Una consulta pasada, en cambio, puede ser de cualquier fecha
+ * anterior: es justamente para pasar al sistema atenciones que ya ocurrieron.
+ */
+export function checkOpenTime(occurredAt: string, now = new Date(), origin: 'sin_cita' | 'pasada' = 'sin_cita') {
   const at = Date.parse(occurredAt);
+  if (origin === 'pasada') {
+    if (now.getTime() - at < PAST_MIN_AGE_MS) throw new VisitError(400, 'Una consulta pasada debe tener fecha y hora en el pasado. Para atender ahora usa «Atender ahora».');
+    if (at < PAST_EARLIEST) throw new VisitError(400, 'Revisa la fecha: es anterior al año 2000.');
+    return;
+  }
   if (at - now.getTime() > OPEN_FUTURE_MS) throw new VisitError(400, 'La hora de inicio está en el futuro. Revisa la hora del teléfono.');
   if (now.getTime() - at > OPEN_PAST_MS) throw new VisitError(400, 'La atención tiene más de 7 días. Regístrala como consulta pasada desde la ficha del paciente.');
 }

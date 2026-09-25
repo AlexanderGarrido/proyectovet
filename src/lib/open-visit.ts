@@ -32,7 +32,8 @@ export async function openVisit(user: VisitUser, input: OpenVisitInput, now = ne
     }
     // La hora se valida después del comprobante: un reintento legítimo de
     // hace más de siete días debe recibir su cita, no un rechazo.
-    checkOpenTime(input.occurredAt, now);
+    const origin = input.origin ?? 'sin_cita';
+    checkOpenTime(input.occurredAt, now, origin);
     const [patient] = await tx.select({ id: patients.id, ownerId: patients.ownerId, isActive: patients.isActive })
       .from(patients).where(eq(patients.id, input.patientId));
     if (!patient) throw new VisitError(404, 'Paciente no encontrado.');
@@ -44,8 +45,10 @@ export async function openVisit(user: VisitUser, input: OpenVisitInput, now = ne
     const updatedAt = new Date(now.getTime());
     const [visit] = await tx.insert(appointments).values({
       patientId: patient.id, ownerId: patient.ownerId, veterinarianId: user.id,
-      scheduledAt: start, startedAt: start, endAt: new Date(start.getTime() + PROVISIONAL_MINUTES * 60_000),
-      type: 'consulta', status: 'en_curso', origin: 'sin_cita', travelBufferMinutes: 0, updatedAt,
+      // Una consulta pasada no se cronometró en vivo: sin inicio medido, no
+      // entra en el promedio de duración de la jornada.
+      scheduledAt: start, startedAt: origin === 'pasada' ? null : start, endAt: new Date(start.getTime() + PROVISIONAL_MINUTES * 60_000),
+      type: 'consulta', status: 'en_curso', origin, travelBufferMinutes: 0, updatedAt,
     }).returning({ id: appointments.id });
 
     const receivedAt = new Date();

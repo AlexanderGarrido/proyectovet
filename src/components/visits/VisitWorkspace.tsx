@@ -32,6 +32,11 @@ export function VisitWorkspace({ initial, visitId, onBack }: { initial: DaySnaps
   } = controller;
   const [section, setSection] = useState<(typeof SECTIONS)[number][0]>('atencion');
   const { alerts, state: alertsState } = usePatientAlerts(visit.patientId);
+  // Sin señal no se pueden pedir las alertas; una visita creada desde el
+  // directorio ya las trae en la copia, y ocultarlas justo ahí sería peligroso.
+  const offlineAlerts = alertsState === 'sin-conexion' && visit.alerts;
+  const shownAlerts = offlineAlerts ? visit.alerts! : alerts;
+  const shownState = offlineAlerts ? 'listo' : alertsState;
 
   async function back() {
     try { await saveDraftNow(); onBack?.(); }
@@ -66,7 +71,7 @@ export function VisitWorkspace({ initial, visitId, onBack }: { initial: DaySnaps
         <a className="min-h-11 text-sm text-primary" href={`/citas/${visitId}/editar`}>Editar agenda</a>
       </div>
 
-      <VisitHeader visit={visit} alerts={alerts} alertsState={alertsState} />
+      <VisitHeader visit={visit} alerts={shownAlerts} alertsState={shownState} />
 
       {error && <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100 print:hidden">{error}</div>}
 

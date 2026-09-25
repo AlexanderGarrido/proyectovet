@@ -67,7 +67,7 @@ export function useVisitDraft(initial: DaySnapshot, visitId: number) {
   const [photosBusy, setPhotosBusy] = useState(false);
   const [online, setOnline] = useState(true);
   const identityValid = useFieldIdentity(initial.userId);
-  const pendingStatus = pending && ['travel', 'start'].includes(pending.operation.action);
+  const pendingStatus = pending && ['travel', 'start', 'open'].includes(pending.operation.action);
   const mounted = useRef(true);
   const hadPending = useRef<QueuedOperation | null>(null);
 
@@ -105,7 +105,7 @@ export function useVisitDraft(initial: DaySnapshot, visitId: number) {
         const previous = hadPending.current;
         hadPending.current = null;
         const fresh = await refresh();
-        if (!['travel', 'start'].includes(previous.action)) resetAfterConfirm(fresh);
+        if (!['travel', 'start', 'open'].includes(previous.action)) resetAfterConfirm(fresh);
       } else hadPending.current = item?.operation ?? null;
     }).catch((e) => setError(e.message));
     refreshPending(); window.addEventListener(FIELD_EVENT, refreshPending);
@@ -140,7 +140,7 @@ export function useVisitDraft(initial: DaySnapshot, visitId: number) {
   }
 
   async function refresh() {
-    if (navigator.onLine) {
+    if (navigator.onLine && visitId > 0) {
       const response = await fetch(`/api/visits/${visitId}`);
       if (!response.ok) throw new Error('No se pudo actualizar la visita. Conserva esta pantalla y reintenta.');
       const data: DaySnapshot = await response.json();
@@ -162,7 +162,7 @@ export function useVisitDraft(initial: DaySnapshot, visitId: number) {
       setPending(remaining);
       if (remaining) { setError(remaining.error || result.error || 'Guardado en el dispositivo, pendiente de sincronizar.'); return; }
       const fresh = await refresh();
-      if (syncedAction && !['travel', 'start'].includes(syncedAction)) resetAfterConfirm(fresh);
+      if (syncedAction && !['travel', 'start', 'open'].includes(syncedAction)) resetAfterConfirm(fresh);
       toast.success('Visita guardada y sincronizada');
     } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo sincronizar'); }
     finally { setBusy(false); }

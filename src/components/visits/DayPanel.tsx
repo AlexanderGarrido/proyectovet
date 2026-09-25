@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { DaySnapshot, VisitSnapshot } from '../../lib/visit-types';
 import { clinicDay, clinicDateLabel, clinicHhmm, clinicTime } from '../../lib/clinic-time';
-import { FIELD_EVENT, applyPendingUpdate, getDay, prepareDay, type QueuedVisit } from '../../lib/field-storage';
+import { FIELD_EVENT, applyPendingUpdate, getDay, prepareDay, resolveVisitAlias, type QueuedVisit } from '../../lib/field-storage';
 import { useSyncState } from '../common/SyncStatus';
 import { useFieldIdentity } from './useFieldIdentity';
 import { VisitWorkspace } from './VisitWorkspace';
@@ -75,6 +75,13 @@ export function DayPanel({ initial, offline = false, initialVisitId }: { initial
     window.addEventListener(FIELD_EVENT, check);
     return () => { active = false; window.removeEventListener(FIELD_EVENT, check); };
   }, [initial.userId]);
+
+  // Una visita abierta sin señal cambia de id al sincronizar: si la que está
+  // en pantalla desapareció de la copia, se busca su número real.
+  useEffect(() => {
+    if (!selected || selected > 0 || snapshot.visits.some((v) => v.id === selected)) return;
+    resolveVisitAlias(initial.userId, selected).then((real) => { if (real) setSelected(real); }).catch(() => {});
+  }, [selected, snapshot, initial.userId]);
 
   async function prepare() {
     setBusy(true); setNotice(''); setProblem('');

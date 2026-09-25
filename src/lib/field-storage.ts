@@ -205,6 +205,35 @@ async function resumePromotions(userId: string) {
  * Atiende sin cita y sin señal: la visita nace en la copia local con un id
  * provisorio y su apertura queda primera en la cola.
  */
+/**
+ * Descarta una atención sin cita abierta por error. Si todavía no llegó al
+ * servidor, basta con retirarla del dispositivo; si ya tiene número real, la
+ * borra el servidor (que revalida que no tenga nota ni cobro) y recién
+ * entonces se retira de aquí. Espera a cualquier envío en curso: una
+ * apertura que se confirma a mitad del descarte dejaría una cita huérfana.
+ */
+export async function discardFieldVisit(userId: string, visitId: number): Promise<void> {
+  if (syncPromise) await syncPromise.catch(() => undefined);
+  await withTabLock(userId, async () => {
+    const realId = visitId < 0 ? await read<number>(aliasKey(userId, visitId)) : visitId;
+    if (realId) {
+      const response = await fetch(`/api/visits/${realId}/discard`, {
+        method: 'POST', headers: { 'X-Field-User': userId }, signal: AbortSignal.timeout(15000),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || 'No se pudo descartar la atención. Reintenta con señal.');
+      }
+    }
+    for (const id of new Set([visitId, realId ?? visitId])) {
+      for (const item of await listPending(userId)) if (item.operation.visitId === id) await removePending(userId, item.operation.id);
+      await removeFieldDraft(userId, id);
+    }
+    const day = await getDay(userId);
+    if (day) await saveDay({ ...day, visits: day.visits.filter((v) => v.id !== visitId && v.id !== realId) });
+  });
+}
+
 export async function startUnscheduledVisit(userId: string, card: PatientCard, userName: string): Promise<number> {
   const day = await getDay(userId);
   if (!day) throw new Error('Prepara la jornada sin conexión antes de atender sin señal.');

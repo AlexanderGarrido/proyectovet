@@ -1,6 +1,6 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { IDBFactory } from 'fake-indexeddb';
-import { activateFieldUser, clearFieldData, getDay, listPending, loadFieldDraft, queueVisit, rememberVisitAlias, removePending, resolveVisitAlias, saveDay, saveFieldDraft, startUnscheduledVisit, syncPending } from './field-storage';
+import { activateFieldUser, clearFieldData, discardFieldVisit, getDay, listPending, loadFieldDraft, queueVisit, rememberVisitAlias, removePending, resolveVisitAlias, saveDay, saveFieldDraft, startUnscheduledVisit, syncPending } from './field-storage';
 import type { DaySnapshot, PatientCard, VisitOperation } from './visit-types';
 const operation: VisitOperation = { id: '7f3f63d0-5c8d-4cb9-9bf2-9fbc65d65031', visitId: 1, expectedUpdatedAt: '2026-09-16T10:00:00.000Z', action: 'complete', record: { reason: 'Consulta' }, noCharge: true };
 beforeEach(async () => {
@@ -243,5 +243,46 @@ describe('Atención sin cita sin señal', () => {
     const fetchMock = server(41); vi.stubGlobal('fetch', fetchMock);
     expect((await syncPending('vet-a')).sent).toBe(1);
     expect(fetchMock.mock.calls[0][0]).toBe('/api/visits/41/sync');
+  });
+});
+
+describe('Descartar una atención sin cita', () => {
+  it('local sin sincronizar: se borra del dispositivo sin tocar el servidor', async () => {
+    await saveDay(fieldDay());
+    const id = await startUnscheduledVisit('vet-a', card, 'Vet A');
+    await saveFieldDraft('vet-a', id, { reason: 'Error' });
+    const fetchMock = vi.fn(); vi.stubGlobal('fetch', fetchMock);
+    await discardFieldVisit('vet-a', id);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(await listPending('vet-a')).toEqual([]);
+    expect(await loadFieldDraft('vet-a', id)).toBeNull();
+    expect((await getDay('vet-a'))!.visits).toEqual([]);
+  });
+
+  it('ya sincronizada: la descarta el servidor y se retira de la copia', async () => {
+    await saveDay({ ...fieldDay(), visits: [{ id: 41 } as any] });
+    const fetchMock = vi.fn(async (_url: string, _init?: any) => Response.json({ discarded: 41 })); vi.stubGlobal('fetch', fetchMock);
+    await discardFieldVisit('vet-a', 41);
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/visits/41/discard');
+    expect(fetchMock.mock.calls[0][1].headers['X-Field-User']).toBe('vet-a');
+    expect((await getDay('vet-a'))!.visits).toEqual([]);
+  });
+
+  it('si el servidor la rechaza, no se borra nada del dispositivo', async () => {
+    await saveDay({ ...fieldDay(), visits: [{ id: 41 } as any] });
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ error: 'La atención ya tiene una nota clínica.' }, { status: 409 })));
+    await expect(discardFieldVisit('vet-a', 41)).rejects.toThrow('nota clínica');
+    expect((await getDay('vet-a'))!.visits).toHaveLength(1);
+  });
+
+  it('local cuya apertura ya se confirmó: descarta el número real', async () => {
+    await saveDay(fieldDay());
+    const id = await startUnscheduledVisit('vet-a', card, 'Vet A');
+    vi.stubGlobal('fetch', server(41));
+    await syncPending('vet-a');
+    const fetchMock = vi.fn(async (_url: string, _init?: any) => Response.json({ discarded: 41 })); vi.stubGlobal('fetch', fetchMock);
+    await discardFieldVisit('vet-a', id);
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/visits/41/discard');
+    expect((await getDay('vet-a'))!.visits).toEqual([]);
   });
 });

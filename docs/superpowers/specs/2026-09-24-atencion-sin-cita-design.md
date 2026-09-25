@@ -54,7 +54,7 @@ Se mantiene como enlace secundario en la ficha del paciente, solo para registrar
 
 La migración es aditiva: añade una columna con valor por defecto y no toca los datos existentes.
 
-- `appointments.origin`: `varchar(20)` con restricción `CHECK (origin IN ('agendada', 'sin_cita'))`, `NOT NULL DEFAULT 'agendada'`. Las citas existentes quedan como `agendada`.
+- `appointments.origin`: enum de Postgres `appointment_origin` con los valores `agendada` y `sin_cita`, `NOT NULL DEFAULT 'agendada'`. Usa la misma convención que `status` y `type` de las citas. Las citas existentes quedan como `agendada`.
 - No se crean tablas nuevas. El trigger `ensure_rls_on_new_tables` no interviene.
 - El SQL queda versionado en `docs/migrations/`, que es el flujo del proyecto. Además se aplica como migración de Supabase y se actualiza el snapshot local de Drizzle.
 
@@ -139,7 +139,9 @@ En `save-visit`, cuando `action = 'complete'` y la cita es `sin_cita`, `endAt` p
 
 ### Con señal
 
-Se usa el mismo camino. `open` se envía de inmediato, y con el id real se navega a `/citas/{id}`. No hay un segundo camino que mantener.
+«Atender ahora» llama directo a `POST /api/visits/open`, sin pasar por la cola, y con el id real navega a `/citas/{id}`. La cola necesita una jornada preparada en el dispositivo, y quien atiende con señal desde la ficha puede no tenerla.
+
+El contrato es el mismo en los dos modos: el mismo endpoint, la misma operación y la misma protección contra duplicados. La pantalla conserva el UUID de la operación mientras no tenga respuesta, así que tocar el botón otra vez reintenta la misma operación en vez de crear una segunda atención. La cola se usa solo en el modo sin conexión.
 
 ## 4. Pruebas y salida a producción
 

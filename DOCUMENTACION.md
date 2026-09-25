@@ -85,6 +85,17 @@ Una versión nueva de la aplicación no reemplaza a la que controla pestañas ab
 
 **Límites deliberados:** la copia es de la jornada preparada, no de toda la base. Una jornada antigua se identifica como tal. Hace falta abrir la aplicación para sincronizar; no se promete sincronización con el navegador cerrado. Una sesión vencida exige volver a iniciar con la misma cuenta. Los controles nuevos, documentos PDF del servidor y proveedores de pago requieren señal. Un pago registrado offline no ejecuta un cobro bancario: registra dinero ya recibido.
 
+## Atención sin cita
+
+Administración y veterinarios pueden atender a cualquier paciente activo sin haberlo agendado: «Atender ahora» en la ficha del paciente, o «Atender sin cita» en Hoy y en el modo sin conexión. Se abre el mismo espacio de atención de una visita agendada —nota, insumos, prestaciones, cobro, pago y cierre—, ya en curso.
+
+Por debajo se crea una cita con `origin = 'sin_cita'` a la hora real de inicio, mediante `POST /api/visits/open`: una operación con UUID y comprobante, igual que las demás, así que reintentarla no crea otra atención. No se bloquea por solapamientos (ya ocurrió), pero las citas que se agenden después sí la cuentan como tiempo ocupado. Al cerrarla, su hora de fin pasa a ser la real. La agenda, Hoy y el centro de sincronización la muestran con la etiqueta «Sin cita».
+
+- **Con señal:** la apertura va directo al servidor y la pantalla lleva a `/citas/:id`.
+- **Sin señal:** la copia del día trae un directorio de pacientes activos (hasta 2000, con alertas y sus 3 últimas consultas y vacunas; solo para administración y veterinarios). La visita nace en el dispositivo con un número provisorio negativo; la apertura queda primera en la cola y la nota se encadena a ella. Al sincronizar, el servidor entrega el número real y el dispositivo lo reemplaza en la cola, el borrador y la copia; si se corta a la mitad, lo retoma en el siguiente envío. Si la apertura se rechaza (por ejemplo, el paciente se desactivó), la apertura y lo que depende de ella quedan en «Revisión requerida» y el borrador se conserva.
+
+«Registrar consulta pasada» (`/historial/nuevo`) queda para pasar al sistema una atención anterior, sin cobro ni cola.
+
 ## Métricas operativas
 
 Hoy muestra visitas por atender/completadas, saldo de los cobros de esas visitas y promedio entre `started_at` y `completed_at`. Las atenciones anteriores a esta versión sin esos tiempos no intervienen en el promedio. Un inicio/cierre capturado sin conexión se fecha al confirmarse en servidor; no debe interpretarse como cronometraje exacto del trabajo offline.
@@ -105,6 +116,7 @@ Hoy muestra visitas por atender/completadas, saldo de los cobros de esas visitas
 - `GET /api/jornada`: jornada del día.
 - `GET /api/visits/:id`: contexto de visita para el usuario autorizado.
 - `POST /api/visits/:id/sync`: operación validada; exige que `X-Field-User` coincida con la sesión.
+- `POST /api/visits/open`: abre una atención sin cita (idempotente por UUID); mismas exigencias de sesión.
 - `GET /api/patients/:id/timeline`: cronología paginada y filtrada por rol.
 - `GET|POST|DELETE /api/patients/:id/alerts`: alertas del paciente; retirar marca resuelta, no borra.
 - `GET|POST /api/services` y `GET|POST /api/clinical-templates`: catálogo y plantillas.
@@ -119,7 +131,11 @@ Configurar conexión PostgreSQL (`DATABASE_URL`; pooler con `prepare:false`), co
 
 Respaldar y aplicar, en orden, `docs/migrations/2026-09-16-operacion-domicilio.sql` y `docs/migrations/2026-09-18-experiencia-veterinaria.sql` antes de desplegar. La segunda es aditiva: agrega plantillas, alertas, catálogo de prestaciones, domicilios, recorridos, pendientes y comunicaciones, más columnas con valor por omisión. No borra ni reescribe datos.
 
-Para desactivar una interfaz nueva se usan banderas de función (`src/lib/features.ts`, variables `PUBLIC_FEATURE_*` con el valor `off`), **nunca borrando sus tablas**: una tabla vacía se vuelve a llenar, una eliminada se lleva por delante lo ya registrado.
+Para desactivar una interfaz nueva se usan banderas de función (`src/lib/features.ts`, variables `PUBLIC_FEATURE_*` con el valor `off`), **nunca borrando sus tablas**: una tabla vacía se vuelve a llenar, una eliminada se lleva por delante lo ya registrado. La atención sin cita se apaga con `PUBLIC_FEATURE_ATENCION_SIN_CITA=off`: desaparecen los botones, `POST /api/visits/open` responde 404 y la copia del día deja de traer el directorio.
+
+`docs/migrations/2026-09-24-atencion-sin-cita.sql` agrega el enum `appointment_origin` y la columna `appointments.origin` (por omisión `agendada`). Es aditiva y debe aplicarse antes de desplegar ese código.
+
+**Pruebas de integración.** `npm run test:integration` corre contra un Postgres real las transacciones que las pruebas unitarias simulan (apertura, guardado con prestación y pago, cierre, reintentos y solapamiento de agenda). Solo corre con `TEST_DATABASE_URL`; sin ella se salta, y ni `npm test` ni el build la ejecutan. Crea sus propios datos marcados `[TEST]` y los borra al terminar; `npm run test:integration:limpiar` elimina restos si una prueba se cortó. **Hoy `TEST_DATABASE_URL` apunta a producción, que solo tiene datos de prueba: antes de atender clientes reales, apuntarla a una base aparte.**
 
 `npm run db:seed-catalog` carga un catálogo mínimo de prestaciones y las tres plantillas. Escribe en la base real y sus precios son marcadores de posición: revisarlos con el veterinario antes del piloto.
 

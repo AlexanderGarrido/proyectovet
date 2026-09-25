@@ -102,3 +102,15 @@ Además: un veterinario ya no puede reasignar una tarea a otra persona, una segu
 6. Medir contraste, foco y zoom. El diseño apunta a 44–48 px y texto de 16 px en formularios, pero eso es una intención, no una medición.
 
 Las pruebas automatizadas (305 casos) cubren contratos, permisos, horario de la clínica, cola, clasificación de fallos, idempotencia, resolución de prestaciones, deduplicación de pendientes y cálculo de cobro y faltantes. Cubren lógica, no experiencia de uso.
+
+## Atención sin cita (24 de septiembre de 2026)
+
+Diseño en `docs/superpowers/specs/2026-09-24-atencion-sin-cita-design.md`, plan en `docs/superpowers/plans/2026-09-24-atencion-sin-cita.md`.
+
+- «Atender ahora» (ficha) y «Atender sin cita» (Hoy y modo sin conexión) abren el espacio de atención completo sin agendar antes. Por debajo, una cita `origin = 'sin_cita'` creada por `POST /api/visits/open`, idempotente.
+- Sin señal: directorio de pacientes activos en la copia del día (versión 3), visita local con número provisorio y reemplazo por el real al sincronizar, con reanudación si se corta.
+- Etiqueta «Sin cita» en agenda, Hoy y centro de sincronización. «Registrar consulta» pasa a «Registrar consulta pasada».
+- Bandera `PUBLIC_FEATURE_ATENCION_SIN_CITA` y migración aditiva `2026-09-24-atencion-sin-cita.sql`, ya aplicada en producción.
+- Primeras pruebas de integración contra Postgres real (`npm run test:integration`): hoy apuntan a producción, que solo tiene datos de prueba.
+
+Falta comprobar en el teléfono: atender con señal y en modo avión, sincronizar al volver la señal y confirmar que no se duplica la atención.

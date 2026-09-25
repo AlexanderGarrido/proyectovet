@@ -42,6 +42,28 @@ export const visitOperationSchema = z.object({
 
 export class VisitError extends Error { constructor(public status: number, message: string) { super(message); } }
 
+/**
+ * Apertura de una atención sin cita. Solo trae paciente y hora: la nota,
+ * los insumos y el cobro viajan después, en las operaciones de siempre,
+ * para que haya un único camino que valide y descuente.
+ */
+export const openVisitSchema = z.object({
+  id: z.string().uuid(),
+  patientId: z.number().int().positive(),
+  occurredAt: z.string().datetime(),
+}).strict();
+export type OpenVisitInput = z.infer<typeof openVisitSchema>;
+
+const OPEN_FUTURE_MS = 10 * 60 * 1000;
+const OPEN_PAST_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** La hora la declara el teléfono: se acota para no aceptar un reloj desajustado. */
+export function checkOpenTime(occurredAt: string, now = new Date()) {
+  const at = Date.parse(occurredAt);
+  if (at - now.getTime() > OPEN_FUTURE_MS) throw new VisitError(400, 'La hora de inicio está en el futuro. Revisa la hora del teléfono.');
+  if (now.getTime() - at > OPEN_PAST_MS) throw new VisitError(400, 'La atención tiene más de 7 días. Regístrala como consulta pasada desde la ficha del paciente.');
+}
+
 export function validateVisitChange(operation: VisitOperation, visit: { status: string; updatedAt: Date | string }, hasRecord: boolean, hasInvoice: boolean) {
   if (new Date(visit.updatedAt).toISOString() !== operation.expectedUpdatedAt) throw new VisitError(409, 'La visita cambió en otro dispositivo. Revisa la versión actual antes de reintentar.');
   if (['cancelada', 'no_asistio'].includes(visit.status)) throw new VisitError(409, 'Esta visita está cancelada o marcada como no realizada.');

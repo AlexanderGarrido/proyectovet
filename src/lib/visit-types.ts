@@ -19,6 +19,10 @@ export interface VisitSnapshot {
   status: string; type: string; reason: string | null; notes: string | null;
   visitAddress: string | null; updatedAt: string; startedAt: string | null; completedAt: string | null;
   noCharge?: boolean;
+  /** 'sin_cita' si la cita se creó al atender. Ausente en copias antiguas. */
+  origin?: 'agendada' | 'sin_cita';
+  /** Solo en visitas locales creadas sin señal: alertas traídas en la copia. */
+  alerts?: { id: number; category: string; text: string; validUntil: string | null }[];
   patient: { name: string; species: string; breed: string | null; weight: string | null; notes: string | null };
   owner: { firstName: string; lastName: string; phone: string | null; address: string | null };
   records: VisitRecord[];
@@ -89,6 +93,21 @@ export interface VisitOperation {
   payment?: { amount: number; method: 'efectivo' | 'transferencia' | 'tarjeta' | 'otro'; reference?: string };
   noCharge?: boolean;
 }
+/**
+ * Apertura de una atención sin cita. Todavía no hay número de cita: en la
+ * cola del dispositivo `visitId` es el id provisorio (negativo) de la
+ * visita local, y lo que viaja al servidor es solo paciente y hora.
+ */
+export interface OpenVisitOperation {
+  id: string;
+  action: 'open';
+  visitId: number;
+  patientId: number;
+  occurredAt: string;
+  predecessorId?: undefined;
+}
+/** Lo que puede haber en la cola del dispositivo. */
+export type QueuedOperation = VisitOperation | OpenVisitOperation;
 export interface VisitResult {
   visitId: number; recordId: number | null; invoiceId: number | null; status: string; updatedAt: string;
   /** Hora del servidor al aceptar la operación. */

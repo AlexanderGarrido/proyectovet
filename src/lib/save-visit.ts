@@ -67,7 +67,10 @@ export async function saveVisit(user: VisitUser, operation: VisitOperation): Pro
         if (!target) throw new VisitError(409, 'La nota que intentas corregir no pertenece a esta visita.');
       }
       const [saved] = await tx.insert(medicalRecords).values({
-        ...record, patientId: visit.patientId, veterinarianId: user.id, appointmentId: visit.id, date: new Date(),
+        // Una consulta pasada se fecha cuando ocurrió, no cuando se transcribe:
+        // si no, la cronología la ordenaría como la atención más reciente.
+        ...record, patientId: visit.patientId, veterinarianId: user.id, appointmentId: visit.id,
+        date: visit.origin === 'pasada' ? new Date(visit.scheduledAt) : new Date(),
         templateId: templateId ?? null, templateVersion: templateVersion ?? null,
         // Una adenda declara explícitamente a quién corrige. Si no lo
         // declara pero la visita ya tenía nota, se enlaza a la primera:

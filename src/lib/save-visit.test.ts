@@ -289,3 +289,22 @@ describe('cierre de una atención sin cita', () => {
     expect(update).not.toHaveProperty('endAt');
   });
 });
+
+describe('consulta pasada', () => {
+  const scheduledAt = new Date('2025-03-01T13:00:00.000Z');
+
+  it('la nota toma la fecha de la consulta, no la de hoy', async () => {
+    const state = transaction([[{ ...visit, origin: 'pasada', scheduledAt }], [], [], []]);
+    await saveVisit(user, operation({ record: { reason: 'Control' } }));
+    const record = state.committed.find((w) => w.table === medicalRecords && w.kind === 'insert')!.value;
+    expect(record.date.toISOString()).toBe(scheduledAt.toISOString());
+  });
+
+  it('cerrarla no mueve la hora de fin a hoy', async () => {
+    const invoice = { id: 4, total: '18000.00', status: 'pagada' };
+    const state = transaction([[{ ...visit, origin: 'pasada', scheduledAt }], [], [{ id: 3 }], [invoice], [{ amount: '18000.00' }], []]);
+    await saveVisit(user, operation({ action: 'complete' }));
+    const update = state.committed.find((w) => w.table === appointments && w.kind === 'update')!.value;
+    expect(update).not.toHaveProperty('endAt');
+  });
+});

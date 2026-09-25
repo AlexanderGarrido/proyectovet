@@ -3,6 +3,8 @@ import { OwnerEditor } from '../../components/patients/OwnerEditor';
 import { hasPermission } from '../../lib/permissions';
 import DashboardLayout from '../../layouts/DashboardLayout.astro';
 import { PatientProfileTabs } from '../../components/patients/PatientProfileTabs';
+import { AttendNowButton } from '../../components/patients/AttendNowButton';
+import { features } from '../../lib/features';
 import { db } from '../../db';
 import { patients, owners } from '../../db/schema/patients';
 import { medicalRecords } from '../../db/schema/medical';
@@ -67,7 +69,8 @@ const speciesEmoji: Record<string, string> = { perro: '🐕', gato: '🐈', ave:
     </div>
     <div class="flex w-full flex-wrap gap-2 sm:w-auto">
       {canEditPatient && <a href={`/pacientes/${id}/editar`} class="inline-flex min-h-11 items-center justify-center rounded-lg border px-4 text-sm font-medium hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">Editar ficha</a>}
-      {hasPermission(user.role, 'appointments', 'write') && <a href={`/citas/nueva?patientId=${id}`} class="inline-flex min-h-11 items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">Agendar cita</a>}
+      {features.atencionSinCita && canEdit && patient.isActive && <AttendNowButton client:load userId={user.id} patientId={id} />}
+      {hasPermission(user.role, 'appointments', 'write') && <a href={`/citas/nueva?patientId=${id}`} class="inline-flex min-h-11 items-center justify-center rounded-lg border px-4 text-sm font-medium hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">Agendar cita</a>}
     </div>
   </header>
 

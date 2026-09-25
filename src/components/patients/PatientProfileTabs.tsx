@@ -169,7 +169,7 @@ export function PatientProfileTabs({ patientId, canEdit, canWriteAppointments, c
         <TabsContent value="consultas">
           <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
             <span className="text-sm text-muted-foreground">Últimas consultas registradas</span>
-            {canEdit && <a href={`/historial/nuevo?patientId=${patientId}`} className="text-sm font-medium text-primary hover:underline">Registrar consulta</a>}
+            {canEdit && <a href={`/historial/nuevo?patientId=${patientId}`} className="text-sm text-muted-foreground hover:underline">Registrar consulta pasada</a>}
           </div>
           {records.length === 0 ? (
             <EmptyState icon={FileText} title="Sin registros médicos" />

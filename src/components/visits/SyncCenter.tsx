@@ -8,6 +8,7 @@ const actionLabel: Record<string, string> = {
   start: 'Inicio de atención',
   save: 'Guardado de consulta',
   complete: 'Cierre de visita',
+  open: 'Inicio de atención sin cita',
 };
 
 /**
@@ -74,11 +75,12 @@ export function SyncCenter({
                 <p className="font-medium">
                   {actionLabel[item.operation.action] ?? item.operation.action}
                   {item.label ? ` · ${item.label}` : ''}
-                  <span className="font-normal text-muted-foreground"> · visita #{item.operation.visitId}</span>
+                  {/* Un id negativo es provisorio: la visita todavía no tiene número ni página. */}
+                  <span className="font-normal text-muted-foreground"> · {item.operation.visitId > 0 ? `visita #${item.operation.visitId}` : 'atención nueva'}</span>
                 </p>
                 {onOpenVisit
                   ? <button className="text-sm text-primary underline-offset-2 hover:underline" onClick={() => onOpenVisit(item.operation.visitId)}>Abrir visita</button>
-                  : <a className="text-sm text-primary underline-offset-2 hover:underline" href={`/citas/${item.operation.visitId}`}>Abrir visita</a>}
+                  : item.operation.visitId > 0 && <a className="text-sm text-primary underline-offset-2 hover:underline" href={`/citas/${item.operation.visitId}`}>Abrir visita</a>}
               </div>
               <p className="mt-1 text-xs text-muted-foreground">
                 En cola {ageLabel(item.createdAt)}

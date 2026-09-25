@@ -45,6 +45,7 @@ export const GET: APIRoute = async ({ request, locals }) => {
         endAt: appointments.endAt,
         type: appointments.type,
         status: appointments.status,
+        origin: appointments.origin,
         reason: appointments.reason,
         notes: appointments.notes,
         visitAddress: appointments.visitAddress,

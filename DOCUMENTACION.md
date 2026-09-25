@@ -94,7 +94,9 @@ Por debajo se crea una cita con `origin = 'sin_cita'` a la hora real de inicio, 
 - **Con señal:** la apertura va directo al servidor y la pantalla lleva a `/citas/:id`.
 - **Sin señal:** la copia del día trae un directorio de pacientes activos (hasta 2000, con alertas y sus 3 últimas consultas y vacunas; solo para administración y veterinarios). La visita nace en el dispositivo con un número provisorio negativo; la apertura queda primera en la cola y la nota se encadena a ella. Al sincronizar, el servidor entrega el número real y el dispositivo lo reemplaza en la cola, el borrador y la copia; si se corta a la mitad, lo retoma en el siguiente envío. Si la apertura se rechaza (por ejemplo, el paciente se desactivó), la apertura y lo que depende de ella quedan en «Revisión requerida» y el borrador se conserva.
 
-«Registrar consulta pasada» (`/historial/nuevo`) queda para pasar al sistema una atención anterior, sin cobro ni cola.
+**Descartar.** Una atención sin cita (o consulta pasada) abierta por error se descarta con «Descartar atención», mientras no tenga nota, cobro ni guardados en cola más allá de su apertura. Se borra por completo; no queda como cancelada. Si todavía no llegó al servidor, solo se retira del dispositivo; si ya llegó, `POST /api/visits/:id/discard` revalida todo en una transacción y la borra (requiere señal).
+
+**Consulta pasada.** «Registrar consulta pasada» (pestaña Consultas de la ficha) pide fecha y hora y abre el mismo espacio de atención, con `origin = 'pasada'`: la nota clínica toma esa fecha (se ordena bien en la cronología), cerrar no mueve la hora de fin y no cuenta en el promedio de duración de la jornada porque no se midió en vivo. Acepta cualquier fecha pasada y requiere señal. El formulario anterior (`/historial/nuevo`) se eliminó.
 
 ## Métricas operativas
 
@@ -116,7 +118,8 @@ Hoy muestra visitas por atender/completadas, saldo de los cobros de esas visitas
 - `GET /api/jornada`: jornada del día.
 - `GET /api/visits/:id`: contexto de visita para el usuario autorizado.
 - `POST /api/visits/:id/sync`: operación validada; exige que `X-Field-User` coincida con la sesión.
-- `POST /api/visits/open`: abre una atención sin cita (idempotente por UUID); mismas exigencias de sesión.
+- `POST /api/visits/open`: abre una atención sin cita o una consulta pasada (`origin`), idempotente por UUID; mismas exigencias de sesión.
+- `POST /api/visits/:id/discard`: descarta una atención sin cita o consulta pasada sin nota ni cobro.
 - `GET /api/patients/:id/timeline`: cronología paginada y filtrada por rol.
 - `GET|POST|DELETE /api/patients/:id/alerts`: alertas del paciente; retirar marca resuelta, no borra.
 - `GET|POST /api/services` y `GET|POST /api/clinical-templates`: catálogo y plantillas.
@@ -133,7 +136,7 @@ Respaldar y aplicar, en orden, `docs/migrations/2026-09-16-operacion-domicilio.s
 
 Para desactivar una interfaz nueva se usan banderas de función (`src/lib/features.ts`, variables `PUBLIC_FEATURE_*` con el valor `off`), **nunca borrando sus tablas**: una tabla vacía se vuelve a llenar, una eliminada se lleva por delante lo ya registrado. La atención sin cita se apaga con `PUBLIC_FEATURE_ATENCION_SIN_CITA=off`: desaparecen los botones, `POST /api/visits/open` responde 404 y la copia del día deja de traer el directorio.
 
-`docs/migrations/2026-09-24-atencion-sin-cita.sql` agrega el enum `appointment_origin` y la columna `appointments.origin` (por omisión `agendada`). Es aditiva y debe aplicarse antes de desplegar ese código.
+`docs/migrations/2026-09-24-atencion-sin-cita.sql` agrega el enum `appointment_origin` y la columna `appointments.origin` (por omisión `agendada`); `2026-09-25-consulta-pasada.sql` le suma el valor `pasada`. Ambas son aditivas y deben aplicarse antes de desplegar ese código. Con la bandera apagada tampoco se puede registrar una consulta pasada.
 
 **Pruebas de integración.** `npm run test:integration` corre contra un Postgres real las transacciones que las pruebas unitarias simulan (apertura, guardado con prestación y pago, cierre, reintentos y solapamiento de agenda). Solo corre con `TEST_DATABASE_URL`; sin ella se salta, y ni `npm test` ni el build la ejecutan. Crea sus propios datos marcados `[TEST]` y los borra al terminar; `npm run test:integration:limpiar` elimina restos si una prueba se cortó. **Hoy `TEST_DATABASE_URL` apunta a producción, que solo tiene datos de prueba: antes de atender clientes reales, apuntarla a una base aparte.**
 

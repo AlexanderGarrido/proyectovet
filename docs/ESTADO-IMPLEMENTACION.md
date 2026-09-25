@@ -114,3 +114,13 @@ Diseño en `docs/superpowers/specs/2026-09-24-atencion-sin-cita-design.md`, plan
 - Primeras pruebas de integración contra Postgres real (`npm run test:integration`): hoy apuntan a producción, que solo tiene datos de prueba.
 
 Falta comprobar en el teléfono: atender con señal y en modo avión, sincronizar al volver la señal y confirmar que no se duplica la atención.
+
+## Descartar atención y consulta pasada (25 de septiembre de 2026)
+
+Tras probar la atención sin cita en el teléfono. Diseño en `docs/superpowers/specs/2026-09-25-descartar-y-consulta-pasada-design.md`.
+
+- «Descartar atención» borra por completo una atención sin cita o consulta pasada abierta por error, mientras no tenga nota ni cobro: en el dispositivo si no llegó al servidor, o con `POST /api/visits/:id/discard`.
+- «Registrar consulta pasada» usa el mismo espacio de atención, con fecha y hora elegidas (`origin = 'pasada'`, migración `2026-09-25-consulta-pasada.sql`, ya aplicada). La nota toma esa fecha.
+- Se eliminó el formulario anterior (`/historial/nuevo`, `MedicalRecordForm`, `offlineDraft`).
+
+Falta comprobar en el teléfono: descartar una atención abierta por error (con y sin señal) y registrar una consulta pasada con cobro.

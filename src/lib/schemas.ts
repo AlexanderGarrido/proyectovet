@@ -210,20 +210,6 @@ export const appointmentFormSchema = z.object({
 });
 export type AppointmentFormData = z.infer<typeof appointmentFormSchema>;
 
-export const medicalRecordFormSchema = z.object({
-  patientId:       z.string().min(1, 'Selecciona un paciente'),
-  reason:          z.string().min(1, 'El motivo es requerido'),
-  subjective:      z.string().optional(),
-  diagnosis:       z.string().optional(),
-  treatment:       z.string().optional(),
-  observations:    z.string().optional(),
-  temperature:     z.string().optional(),
-  heartRate:       z.string().optional(),
-  weight:          z.string().optional(),
-  respiratoryRate: z.string().optional(),
-});
-export type MedicalRecordFormData = z.infer<typeof medicalRecordFormSchema>;
-
 export const productFormSchema = z.object({
   name:           z.string().min(1, 'Nombre requerido').max(200),
   description:    z.string().optional(),

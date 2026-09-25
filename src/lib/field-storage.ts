@@ -220,7 +220,9 @@ export async function discardFieldVisit(userId: string, visitId: number): Promis
       const response = await fetch(`/api/visits/${realId}/discard`, {
         method: 'POST', headers: { 'X-Field-User': userId }, signal: AbortSignal.timeout(15000),
       });
-      if (!response.ok) {
+      // 404: el servidor ya no la tiene, típicamente porque un intento
+      // anterior la borró y la respuesta se perdió. Se retira igual de aquí.
+      if (!response.ok && response.status !== 404) {
         const data = await response.json().catch(() => ({}));
         throw new Error(data.error || 'No se pudo descartar la atención. Reintenta con señal.');
       }

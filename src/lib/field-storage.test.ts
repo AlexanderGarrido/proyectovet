@@ -268,6 +268,13 @@ describe('Descartar una atención sin cita', () => {
     expect((await getDay('vet-a'))!.visits).toEqual([]);
   });
 
+  it('si el servidor ya no la tiene (respuesta perdida en un intento anterior), se retira igual', async () => {
+    await saveDay({ ...fieldDay(), visits: [{ id: 41 } as any] });
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ error: 'Visita no encontrada' }, { status: 404 })));
+    await discardFieldVisit('vet-a', 41);
+    expect((await getDay('vet-a'))!.visits).toEqual([]);
+  });
+
   it('si el servidor la rechaza, no se borra nada del dispositivo', async () => {
     await saveDay({ ...fieldDay(), visits: [{ id: 41 } as any] });
     vi.stubGlobal('fetch', vi.fn(async () => Response.json({ error: 'La atención ya tiene una nota clínica.' }, { status: 409 })));

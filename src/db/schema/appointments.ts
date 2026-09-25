@@ -34,6 +34,10 @@ export const appointmentStatusEnum = pgEnum('status', [
   'no_asistio',
 ]);
 
+// Cómo nació la cita: agendada con anticipación, o creada al atender sin
+// cita previa. La agenda y los reportes las distinguen con este campo.
+export const appointmentOriginEnum = pgEnum('appointment_origin', ['agendada', 'sin_cita']);
+
 export const appointments = pgTable('appointments', {
   id: serial('id').primaryKey(),
   patientId: integer('patient_id')
@@ -69,6 +73,7 @@ export const appointments = pgTable('appointments', {
   startedAt: timestamp('started_at'),
   completedAt: timestamp('completed_at'),
   noCharge: boolean('no_charge').notNull().default(false),
+  origin: appointmentOriginEnum('origin').notNull().default('agendada'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow().$onUpdate(() => new Date()),
 }, (t) => ({
